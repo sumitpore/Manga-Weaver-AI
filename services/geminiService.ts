@@ -24,7 +24,13 @@ const generateStoryOutline = async (prompt: string, numPages: number, hasCharact
         ? "The user has provided reference images for the main character(s). Ensure your descriptions are consistent with these visual references."
         : "The user has not provided character reference images. You must create and maintain a consistent visual description for all main characters throughout the story.";
 
-    const systemInstruction = `You are a master storyteller and manga scriptwriter. Your task is to break down a user's story idea into a page-by-page script for a manga. For each page, you must provide a detailed visual description that an AI artist can use to generate an image. The descriptions should be vivid, focusing on character actions, expressions, setting, and camera angles. Ensure character consistency across all pages.`;
+    const systemInstruction = `You are a master storyteller and manga scriptwriter. Your task is to break down a user's story idea into a page-by-page script for a manga. For each page, you must provide a detailed visual description that an AI artist can use to generate an image. The descriptions should be vivid, focusing on character actions, expressions, setting, and camera angles. Ensure character consistency across all pages.
+
+CRITICAL: Each page MUST include SHORT, SIMPLE text elements typical of comics:
+- Brief dialogue (1-5 words max per speech bubble): "Yes!", "No way!", "Look out!"
+- Simple sound effects: "BANG!", "CRASH!", "WHOOSH!"
+- Short exclamations or reactions
+Keep ALL text very short and simple - AI struggles with long sentences in images.`;
 
     const userPrompt = `
         Story Idea: "${prompt}"
@@ -75,7 +81,16 @@ const generateStoryOutline = async (prompt: string, numPages: number, hasCharact
 const generateImageForPage = async (visualPrompt: string, imageParts: any[]): Promise<string> => {
      const model = 'gemini-2.5-flash-image-preview';
 
-    let fullPrompt = `Generate a single manga/anime comic panel in a portrait aspect ratio (4:5). The style should be modern anime. Visual Description: "${visualPrompt}"`;
+    let fullPrompt = `Generate a single manga/anime comic panel in a portrait aspect ratio (4:5). The style should be modern anime with comic book elements. 
+
+IMPORTANT: Include SHORT, SIMPLE text only:
+- Brief speech bubbles (1-5 words): "Wow!", "Help!", "Yes!"
+- Simple sound effects: "POW!", "ZOOM!", "CRASH!"
+- Short exclamations only
+- NO long sentences or complex dialogue
+- Keep text large, clear, and easy to read
+
+Visual Description: "${visualPrompt}"`;
 
     if (imageParts.length > 0) {
         fullPrompt += "\n\nUse the following uploaded image(s) as character references to maintain consistency.";
@@ -127,7 +142,15 @@ export const regeneratePage = async (annotatedImageB64: string, annotationText: 
     const mimeType = annotatedImageB64.substring(annotatedImageB64.indexOf(":") + 1, annotatedImageB64.indexOf(";"));
     const data = annotatedImageB64.split(',')[1];
     
-    const basePrompt = 'Incorporate the changes described by the annotations (drawings, arrows, shapes, etc.) on this image. Maintain the manga style and a portrait aspect ratio (4:5). Crucially, remove the annotation drawings, text, and shapes from the final image output, leaving only the modified comic art.';
+    const basePrompt = `Incorporate the changes described by the annotations (drawings, arrows, shapes, etc.) on this image. Maintain the manga style and a portrait aspect ratio (4:5). 
+
+IMPORTANT: Keep any existing SHORT comic text elements:
+- Preserve brief speech bubbles and simple sound effects
+- Maintain short exclamations (1-5 words only)
+- Keep text large and clear
+- NO long sentences
+
+Crucially, remove the annotation drawings, text, and shapes from the final image output, leaving only the modified comic art with short text elements intact.`;
     
     let fullPrompt = basePrompt;
     if (annotationText) {
