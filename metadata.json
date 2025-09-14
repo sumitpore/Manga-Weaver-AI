@@ -1,0 +1,5 @@
+{
+  "name": "Manga Weaver AI",
+  "description": "An AI-powered application to create and refine single or multi-page manga/anime comics. Provide a story, upload reference characters, and use intuitive annotations to guide the AI in perfecting every panel.",
+  "requestFramePermissions": []
+}
