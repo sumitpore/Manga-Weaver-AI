@@ -5,7 +5,7 @@ import { ComicDisplay } from './components/ComicDisplay';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { LoadingSpinner } from './components/LoadingSpinner';
-import { generateInitialComic, regeneratePage } from './services/geminiService';
+import { generateComicStory, regeneratePage } from './services/geminiService';
 import type { ComicPage, AppStatus } from './types';
 
 const App: React.FC = () => {
@@ -13,12 +13,12 @@ const App: React.FC = () => {
   const [status, setStatus] = useState<AppStatus>('idle');
   const [error, setError] = useState<string | null>(null);
 
-  const handleGeneration = useCallback(async (prompt: string, files: File[]) => {
+  const handleGeneration = useCallback(async (prompt: string, files: File[], numPages: number) => {
     setStatus('loading');
     setError(null);
     try {
-      const initialPage = await generateInitialComic(prompt, files);
-      setComicPages([initialPage]);
+      const pages = await generateComicStory(prompt, files, numPages);
+      setComicPages(pages);
       setStatus('editing');
     } catch (err) {
       console.error(err);

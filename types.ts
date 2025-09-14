@@ -42,3 +42,13 @@ export interface Circle extends Shape {
 export type ShapeObject = Arrow | Rectangle | Circle;
 
 export type AnnotationObject = ShapeObject | TextAnnotation;
+
+// Types for structured story generation
+export interface StoryPagePrompt {
+    page_number: number;
+    visual_prompt: string;
+}
+
+export interface StoryOutline {
+    pages: StoryPagePrompt[];
+}

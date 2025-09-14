@@ -2,13 +2,14 @@
 import React, { useState, useRef, DragEvent } from 'react';
 
 interface HomePageProps {
-  onGenerate: (prompt: string, files: File[]) => void;
+  onGenerate: (prompt: string, files: File[], numPages: number) => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({ onGenerate }) => {
   const [prompt, setPrompt] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
+  const [numPages, setNumPages] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -73,7 +74,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onGenerate }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (prompt.trim()) {
-      onGenerate(prompt, files);
+      onGenerate(prompt, files, numPages);
     }
   };
   
@@ -110,7 +111,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onGenerate }) => {
                     />
                     <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-200">
                         <div className="flex items-center gap-2">
-                            <button
+                             <button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
                                 className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors"
@@ -124,6 +125,19 @@ export const HomePage: React.FC<HomePageProps> = ({ onGenerate }) => {
                                 <span className="hidden sm:inline">Add Characters</span>
                             </button>
                             <input id="file-upload" name="file-upload" type="file" className="hidden" ref={fileInputRef} multiple accept="image/*" onChange={handleFileChange} />
+                            <div className="h-6 w-px bg-zinc-200 mx-1"></div>
+                             <label htmlFor="num-pages" className="text-sm font-medium text-zinc-600 flex items-center gap-2 cursor-pointer hover:bg-zinc-100 px-3 py-1.5 rounded-lg">
+                                <span className="hidden sm:inline">Pages:</span>
+                                <input
+                                    type="number"
+                                    id="num-pages"
+                                    value={numPages}
+                                    onChange={(e) => setNumPages(Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1)))}
+                                    min="1"
+                                    max="10"
+                                    className="w-12 p-0 border-none bg-transparent focus:outline-none focus:ring-0 text-center font-medium"
+                                />
+                             </label>
                         </div>
                         <button
                             type="submit"
@@ -131,7 +145,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onGenerate }) => {
                             className="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center transition-all duration-300 shadow-md hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed"
                             aria-label="Generate Comic"
                         >
-                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                             <svg xmlns="http://www.w.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M8 6L12 2l4 4"/>
                                 <path d="M12 2v20"/>
                             </svg>

@@ -193,10 +193,6 @@ export const useAnnotations = (imageUrl: string) => {
   }, []);
 
   useEffect(() => {
-    clearCanvas();
-  }, [imageUrl, clearCanvas]);
-
-  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
         const target = e.target as HTMLElement;
         // If the user is typing in an input or textarea, don't trigger global shortcuts.
@@ -217,9 +213,6 @@ export const useAnnotations = (imageUrl: string) => {
   }, [selectedId, pushToHistory]);
 
   const startDrawing = ({ nativeEvent }: React.MouseEvent<HTMLCanvasElement>) => {
-    // This is the core of the fix. By preventing the default mousedown behavior,
-    // we stop the browser from shifting focus away from any active text input,
-    // which in turn prevents the `onBlur` event from firing and creating a race condition.
     nativeEvent.preventDefault();
 
     const { offsetX, offsetY } = nativeEvent;
@@ -228,15 +221,11 @@ export const useAnnotations = (imageUrl: string) => {
     const previouslyActiveId = activeAnnotationId;
     const clickedAnn = currentAnnotations.current.slice().reverse().find(ann => isPointInShape({ x: offsetX, y: offsetY }, ann));
 
-    // Case 1: Clicked on an existing annotation
     if (clickedAnn) {
-        // If it's a text pin, we need to handle committing the old one and opening the new one.
         if (clickedAnn.type === 'text') {
-            // Only update state if we are clicking a *different* pin.
             if (clickedAnn.id !== previouslyActiveId) {
                 setAnnotations(prev => {
                     const prevActive = prev.find(a => a.id === previouslyActiveId);
-                    // Clean up the previously active annotation if it was empty.
                     if (prevActive && prevActive.type === 'text' && prevActive.text.trim() === '') {
                         return prev.filter(a => a.id !== previouslyActiveId);
                     }
@@ -245,7 +234,6 @@ export const useAnnotations = (imageUrl: string) => {
                 setActiveAnnotationId(clickedAnn.id);
             }
         } else {
-            // It's a shape, so close any active text editor.
             setActiveAnnotationId(null);
         }
         setSelectedId(clickedAnn.id);
@@ -253,7 +241,6 @@ export const useAnnotations = (imageUrl: string) => {
         return;
     }
     
-    // Case 2: Clicked on a resize handle of the currently selected shape
     const selectedAnn = currentAnnotations.current.find(a => a.id === selectedId);
     if (selectedAnn && selectedAnn.type !== 'text') {
         const cursor = getCursorForPosition({ x: offsetX, y: offsetY }, selectedAnn);
@@ -270,16 +257,12 @@ export const useAnnotations = (imageUrl: string) => {
         }
     }
 
-    // Case 3: Clicked on empty canvas space
     setSelectedId(null);
 
     if (tool === 'text') {
         const newAnnotation: TextAnnotation = {
             id: nanoid(), x: offsetX, y: offsetY, color, type: 'text', text: ''
         };
-
-        // This is an atomic update. It handles committing the old annotation (if empty)
-        // and creating the new one in a single state update, avoiding race conditions.
         setAnnotations(prev => {
             let nextAnnotations = prev;
             const prevActive = prev.find(a => a.id === previouslyActiveId);
@@ -296,7 +279,6 @@ export const useAnnotations = (imageUrl: string) => {
         setAction('none');
 
     } else {
-        // Drawing a new shape, so close any active text editor.
         setActiveAnnotationId(null);
         setAction('drawing');
         const newAnnotation: ShapeObject = {
@@ -374,7 +356,6 @@ export const useAnnotations = (imageUrl: string) => {
     const finalAnnotations = currentAnnotations.current.map(ann => {
         if (ann.id !== selectedId) return ann;
         
-        // Finalize bounding box for arrows
         if (ann.type === 'arrow') {
             const [x1, y1, x2, y2] = ann.points;
             ann.x = Math.min(x1, x2);
@@ -382,7 +363,6 @@ export const useAnnotations = (imageUrl: string) => {
             ann.width = Math.abs(x1 - x2);
             ann.height = Math.abs(y1 - y2);
         }
-        // Normalize rectangle/circle dimensions
         else if (ann.type !== 'text') {
             if (ann.width < 0) {
                 ann.x += ann.width;
@@ -403,11 +383,9 @@ export const useAnnotations = (imageUrl: string) => {
   };
   
   const getAnnotatedImage = async (includeAnnotations = true): Promise<string | null> => {
-     // Ensure no object is selected to avoid drawing selection handles
      setSelectedId(null);
      setActiveAnnotationId(null);
 
-     // Wait for the next render cycle to ensure the canvas is redrawn without selection
      await new Promise(resolve => requestAnimationFrame(resolve));
 
      return new Promise((resolve) => {
@@ -423,11 +401,9 @@ export const useAnnotations = (imageUrl: string) => {
             const ctx = tempCanvas.getContext('2d');
             if (!ctx) return resolve(null);
 
-            // Draw the original image first
             ctx.drawImage(img, 0, 0);
 
             if (includeAnnotations) {
-                // Draw the annotation canvas on top, scaling it to match the original image dimensions
                 ctx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height);
             }
             
@@ -447,8 +423,11 @@ export const useAnnotations = (imageUrl: string) => {
     setColor,
     hasAnnotations,
     history,
+    setHistory,
     annotations,
     setAnnotations,
+    historyIndex,
+    setHistoryIndex,
     activeAnnotationId,
     setActiveAnnotationId,
     eventHandlers: {
