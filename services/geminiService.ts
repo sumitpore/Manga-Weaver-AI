@@ -26,11 +26,14 @@ const generateStoryOutline = async (prompt: string, numPages: number, hasCharact
 
     const systemInstruction = `You are a master storyteller and manga scriptwriter. Your task is to break down a user's story idea into a page-by-page script for a manga. For each page, you must provide a detailed visual description that an AI artist can use to generate an image. The descriptions should be vivid, focusing on character actions, expressions, setting, and camera angles. Ensure character consistency across all pages.
 
-CRITICAL: Each page MUST include SHORT, SIMPLE text elements typical of comics:
-- Brief dialogue (1-5 words max per speech bubble): "Yes!", "No way!", "Look out!"
-- Simple sound effects: "BANG!", "CRASH!", "WHOOSH!"
-- Short exclamations or reactions
-Keep ALL text very short and simple - AI struggles with long sentences in images.`;
+CRITICAL: Each page MUST include SUFFICIENT text elements for story comprehension:
+- Meaningful dialogue that advances the story (up to 15 words per speech bubble)
+- Narrative text boxes for context, thoughts, or exposition when needed
+- Sound effects that enhance the action: "BANG!", "CRASH!", "WHOOSH!"
+- Character thoughts in thought bubbles when relevant
+- Ensure text is readable and contributes to story understanding
+
+STYLE CONSISTENCY: Specify that ALL pages should use the same visual style - either full color manga style OR black and white manga style, but be consistent throughout the entire comic.`;
 
     const userPrompt = `
         Story Idea: "${prompt}"
@@ -81,14 +84,15 @@ Keep ALL text very short and simple - AI struggles with long sentences in images
 const generateImageForPage = async (visualPrompt: string, imageParts: any[]): Promise<string> => {
      const model = 'gemini-2.5-flash-image-preview';
 
-    let fullPrompt = `Generate a single manga/anime comic panel in a portrait aspect ratio (4:5). The style should be modern anime with comic book elements. 
+    let fullPrompt = `Generate a single manga/anime comic panel in a portrait aspect ratio (4:5). Use a consistent FULL COLOR modern manga/anime style with vibrant colors throughout the entire comic series.
 
-IMPORTANT: Include SHORT, SIMPLE text only:
-- Brief speech bubbles (1-5 words): "Wow!", "Help!", "Yes!"
-- Simple sound effects: "POW!", "ZOOM!", "CRASH!"
-- Short exclamations only
-- NO long sentences or complex dialogue
-- Keep text large, clear, and easy to read
+IMPORTANT: Include SUFFICIENT text for story comprehension:
+- Meaningful dialogue in speech bubbles (up to 15 words) that advances the story
+- Narrative text boxes for context, setting, or exposition when needed
+- Character thoughts in thought bubbles when relevant
+- Sound effects that enhance the action: "POW!", "ZOOM!", "CRASH!"
+- Ensure all text is large, clear, and easily readable
+- Text should help readers understand the story progression
 
 Visual Description: "${visualPrompt}"`;
 
@@ -142,15 +146,17 @@ export const regeneratePage = async (annotatedImageB64: string, annotationText: 
     const mimeType = annotatedImageB64.substring(annotatedImageB64.indexOf(":") + 1, annotatedImageB64.indexOf(";"));
     const data = annotatedImageB64.split(',')[1];
     
-    const basePrompt = `Incorporate the changes described by the annotations (drawings, arrows, shapes, etc.) on this image. Maintain the manga style and a portrait aspect ratio (4:5). 
+    const basePrompt = `Incorporate the changes described by the annotations (drawings, arrows, shapes, etc.) on this image. Maintain the consistent FULL COLOR manga/anime style and a portrait aspect ratio (4:5). 
 
-IMPORTANT: Keep any existing SHORT comic text elements:
-- Preserve brief speech bubbles and simple sound effects
-- Maintain short exclamations (1-5 words only)
-- Keep text large and clear
-- NO long sentences
+IMPORTANT: Preserve and enhance comic text elements:
+- Keep existing meaningful dialogue and narrative text
+- Maintain speech bubbles, thought bubbles, and text boxes
+- Preserve sound effects and enhance if needed
+- Ensure all text remains large, clear, and readable
+- Text should contribute to story understanding
+- Maintain the same color style as the rest of the comic
 
-Crucially, remove the annotation drawings, text, and shapes from the final image output, leaving only the modified comic art with short text elements intact.`;
+Crucially, remove the annotation drawings, text, and shapes from the final image output, leaving only the modified comic art with enhanced text elements intact.`;
     
     let fullPrompt = basePrompt;
     if (annotationText) {
