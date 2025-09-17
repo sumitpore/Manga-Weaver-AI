@@ -1,6 +1,17 @@
+export interface TextElement {
+  id: string;
+  x: string; // e.g., "120px"
+  y: string; // e.g., "120px"
+  type: 'dialogue' | 'narrative' | 'thoughts';
+  text: string;
+  anchor?: { x: string; y: string }; // Optional anchor for speech bubble tails
+}
+
 export interface ComicPage {
   id:string;
   imageUrl: string; // base64 data URL
+  textElements: TextElement[];
+  storyPrompt: StoryPagePrompt;
 }
 
 export type AppStatus = 'idle' | 'loading' | 'editing';
@@ -44,9 +55,20 @@ export type ShapeObject = Arrow | Rectangle | Circle;
 export type AnnotationObject = ShapeObject | TextAnnotation;
 
 // Types for structured story generation
+export interface TextElementData {
+    type: 'dialogue' | 'narrative' | 'thoughts';
+    text: string;
+}
+
+export interface ComicPanelPrompt {
+    panel_number: number;
+    visual_description: string;
+    text_elements: TextElementData[];
+}
+
 export interface StoryPagePrompt {
     page_number: number;
-    visual_prompt: string;
+    panels: ComicPanelPrompt[];
 }
 
 export interface StoryOutline {

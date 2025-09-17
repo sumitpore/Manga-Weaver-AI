@@ -1,9 +1,11 @@
 import React, { useRef, useEffect, RefObject, useCallback } from 'react';
 import type { ComicPage, AnnotationObject, Tool, TextAnnotation } from '../types';
+import { TextElementDisplay } from './TextElementDisplay';
 
 interface AnnotationCanvasProps {
     activePage: ComicPage;
-    tool: Tool;
+    tool: Tool | null;
+    setTool: (tool: Tool | null) => void;
     color: string;
     annotations: AnnotationObject[];
     setAnnotations: React.Dispatch<React.SetStateAction<AnnotationObject[]>>;
@@ -17,11 +19,20 @@ interface AnnotationCanvasProps {
     };
     canvasRef: RefObject<HTMLCanvasElement>;
     imageContainerRef: RefObject<HTMLDivElement>;
+    onTextUpdate: (elementId: string, newText: string) => void;
+    onPositionUpdate?: (elementId: string, newX: string, newY: string) => void;
+    onTextDelete?: (elementId: string) => void;
+    selectedTextElementId?: string | null;
+    onTextElementSelect?: (elementId: string | null) => void;
+    editingTextElementId: string | null;
+    setEditingTextElementId: (id: string | null) => void;
+    commitActiveAnnotation: () => void;
 }
 
 export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ 
     activePage,
-    tool, 
+    tool,
+    setTool,
     color, 
     annotations, 
     setAnnotations,
@@ -29,7 +40,15 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({
     setActiveAnnotationId,
     eventHandlers, 
     canvasRef, 
-    imageContainerRef 
+    imageContainerRef,
+    onTextUpdate,
+    onPositionUpdate,
+    onTextDelete,
+    selectedTextElementId,
+    onTextElementSelect,
+    editingTextElementId,
+    setEditingTextElementId,
+    commitActiveAnnotation
 }) => {
     const textInputRef = useRef<HTMLTextAreaElement>(null);
     const editorRef = useRef<HTMLDivElement>(null);
@@ -37,37 +56,22 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({
     const activeAnnotation = annotations.find(a => a.id === activeAnnotationId) as TextAnnotation | undefined;
 
     useEffect(() => {
+        const img = imageContainerRef.current?.querySelector('img');
+        if (img && img.complete) {
+            const rect = img.getBoundingClientRect();
+            const containerRect = imageContainerRef.current?.getBoundingClientRect();
+            console.log(`📐 [Image Dimensions] Natural: ${img.naturalWidth}x${img.naturalHeight}`);
+            console.log(`📐 [Image Dimensions] Rendered: ${rect.width}x${rect.height}`);
+            console.log(`📐 [Container Dimensions] ${containerRect?.width}x${containerRect?.height}`);
+        }
+    }, [activePage.imageUrl, imageContainerRef]);
+
+    useEffect(() => {
         if(activeAnnotationId !== null && textInputRef.current) {
             textInputRef.current.focus();
             textInputRef.current.value = activeAnnotation?.text || '';
         }
     }, [activeAnnotationId, activeAnnotation]);
-    
-    const commitActiveAnnotation = useCallback(() => {
-        // This handler is now only for blurs that happen from outside the canvas,
-        // e.g., tabbing away or clicking another UI element.
-        // The canvas onMouseDown handler prevents this from firing when clicking the canvas.
-        const idToCommit = activeAnnotationId;
-        if (!idToCommit) return;
-
-        setAnnotations(prevAnnotations => {
-            const annotationToCommit = prevAnnotations.find(a => a.id === idToCommit);
-            // If the annotation is empty, remove it.
-            if (annotationToCommit && annotationToCommit.type === 'text' && annotationToCommit.text.trim() === '') {
-                return prevAnnotations.filter(a => a.id !== idToCommit);
-            }
-            return prevAnnotations;
-        });
-        
-        // Close the editor.
-        setActiveAnnotationId(null);
-    }, [activeAnnotationId, setAnnotations, setActiveAnnotationId]);
-
-
-    const handleCloseEditor = () => {
-        // Commit logic to clean up empty annotations.
-        commitActiveAnnotation();
-    }
 
     const handleDeleteButtonClick = (id: string) => {
         setAnnotations(prev => prev.filter(a => a.id !== id));
@@ -90,17 +94,27 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({
     };
 
     return (
-        <div className="flex-grow w-full lg:w-auto">
+        <div className="flex-grow w-full flex items-center justify-center">
             <div
                 ref={imageContainerRef}
-                className="relative w-full mx-auto shadow-2xl rounded-lg border-4 border-zinc-200"
-                style={{ aspectRatio: '1080 / 1350' }}
+                className="relative shadow-2xl rounded-lg border-4 border-zinc-200 flex-shrink-0 overflow-hidden"
+                style={{ width: '1024px', height: '1024px' }}
             >
                 <img src={activePage.imageUrl} alt="Generated comic page" className="w-full h-full object-contain rounded-lg" />
                 <canvas 
                     ref={canvasRef}
                     {...eventHandlers}
                     className="absolute top-0 left-0 rounded-lg"
+                />
+                <TextElementDisplay 
+                    textElements={activePage.textElements}
+                    onUpdate={onTextUpdate}
+                    onPositionUpdate={onPositionUpdate}
+                    onDelete={onTextDelete}
+                    selectedElementId={selectedTextElementId}
+                    onSelect={onTextElementSelect}
+                    editingId={editingTextElementId}
+                    onSetEditing={setEditingTextElementId}
                 />
                 {activeAnnotation && (
                     <div
@@ -138,7 +152,7 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({
                             <button
                                  onMouseDown={(e) => {
                                      e.preventDefault();
-                                     handleCloseEditor();
+                                     commitActiveAnnotation();
                                  }}
                                  aria-label="Close editor"
                                  title="Close"

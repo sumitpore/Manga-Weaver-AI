@@ -1,4 +1,4 @@
-import type { AnnotationObject, ShapeObject } from '../types';
+import type { AnnotationObject, ShapeObject, TextAnnotation, TextElement } from '../types';
 
 const ANNOTATION_RADIUS = 15;
 const HANDLE_SIZE = 8;
@@ -63,3 +63,8 @@ export const getCursorForPosition = (point: {x: number, y: number}, shape: Annot
     
     return null;
 }
+
+// Parse pixel values from string format
+export const parsePx = (value: string): number => {
+    return parseInt(value.replace('px', ''), 10) || 0;
+};

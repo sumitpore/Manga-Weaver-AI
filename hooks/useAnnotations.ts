@@ -9,12 +9,15 @@ const HANDLE_SIZE = 8;
 type Action = 'none' | 'drawing' | 'moving' | 'resizing';
 type ResizeHandle = 'tl' | 'tr' | 'bl' | 'br' | 'start' | 'end';
 
-export const useAnnotations = (imageUrl: string) => {
+export const useAnnotations = (
+  imageUrl: string, 
+  editingTextElementId: string | null
+) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
 
-  const [tool, setTool] = useState<Tool>('arrow');
+  const [tool, setTool] = useState<Tool | null>(null);
   const [color, setColor] = useState('#ef4444');
   const [annotations, setAnnotations] = useState<AnnotationObject[]>([]);
   const [activeAnnotationId, setActiveAnnotationId] = useState<string | null>(null);
@@ -125,7 +128,7 @@ export const useAnnotations = (imageUrl: string) => {
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(tox, toy);
-    ctx.lineTo(tox - headlen * Math.cos(angle - Math.PI / 6), toy - headlen * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(tox - headlen * Math.cos(angle - Math.PI / 6), toy - headlen * Math.sin(angle + Math.PI / 6));
     ctx.lineTo(tox - headlen * Math.cos(angle + Math.PI / 6), toy - headlen * Math.sin(angle + Math.PI / 6));
     ctx.lineTo(tox, toy);
     ctx.closePath();
@@ -195,8 +198,6 @@ export const useAnnotations = (imageUrl: string) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
         const target = e.target as HTMLElement;
-        // If the user is typing in an input or textarea, don't trigger global shortcuts.
-        // This prevents deleting an annotation when pressing backspace in the text editor.
         if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') {
             return;
         }
@@ -212,10 +213,46 @@ export const useAnnotations = (imageUrl: string) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedId, pushToHistory]);
 
-  const startDrawing = ({ nativeEvent }: React.MouseEvent<HTMLCanvasElement>) => {
-    nativeEvent.preventDefault();
+  const commitActiveAnnotation = useCallback(() => {
+    const idToCommit = activeAnnotationId;
+    if (!idToCommit) return;
 
+    setAnnotations(prevAnnotations => {
+        const annotationToCommit = prevAnnotations.find(a => a.id === idToCommit);
+        // If the annotation is empty, remove it.
+        if (annotationToCommit && annotationToCommit.type === 'text' && annotationToCommit.text.trim() === '') {
+            return prevAnnotations.filter(a => a.id !== idToCommit);
+        }
+        return prevAnnotations;
+    });
+    
+    // Close the editor and deselect the tool.
+    setActiveAnnotationId(null);
+    setTool(null);
+  }, [activeAnnotationId, setAnnotations, setActiveAnnotationId, setTool]);
+
+  const startDrawing = ({ nativeEvent }: React.MouseEvent<HTMLCanvasElement>) => {
+    // Priority 1: An external text element (speech bubble) editor is active.
+    // A click on the canvas should just blur that element. We return early and
+    // DON'T call preventDefault() to allow the browser's native blur behavior,
+    // which will trigger the save logic in the editor component.
+    if (editingTextElementId) {
+        return;
+    }
+
+    nativeEvent.preventDefault();
     const { offsetX, offsetY } = nativeEvent;
+
+    // Priority 2: An internal text annotation editor is active.
+    // This click on the canvas background should commit it.
+    const activeAnn = currentAnnotations.current.find(a => a.id === activeAnnotationId);
+    if (activeAnn && activeAnn.type === 'text') {
+        commitActiveAnnotation();
+        return;
+    }
+
+    // --- Normal Click Logic from here ---
+
     startPoint.current = { x: offsetX, y: offsetY };
     
     const previouslyActiveId = activeAnnotationId;
@@ -224,23 +261,19 @@ export const useAnnotations = (imageUrl: string) => {
     if (clickedAnn) {
         if (clickedAnn.type === 'text') {
             if (clickedAnn.id !== previouslyActiveId) {
-                setAnnotations(prev => {
-                    const prevActive = prev.find(a => a.id === previouslyActiveId);
-                    if (prevActive && prevActive.type === 'text' && prevActive.text.trim() === '') {
-                        return prev.filter(a => a.id !== previouslyActiveId);
-                    }
-                    return prev;
-                });
+                commitActiveAnnotation(); // Commit any other active text annotation
                 setActiveAnnotationId(clickedAnn.id);
             }
         } else {
-            setActiveAnnotationId(null);
+            commitActiveAnnotation();
         }
         setSelectedId(clickedAnn.id);
         setAction('moving');
         return;
     }
     
+    commitActiveAnnotation(); // Commit any active text annotation if clicking on empty space
+
     const selectedAnn = currentAnnotations.current.find(a => a.id === selectedId);
     if (selectedAnn && selectedAnn.type !== 'text') {
         const cursor = getCursorForPosition({ x: offsetX, y: offsetY }, selectedAnn);
@@ -252,34 +285,30 @@ export const useAnnotations = (imageUrl: string) => {
                 return Math.abs(offsetX - handle.x) < HANDLE_SIZE / 2 && Math.abs(offsetY - handle.y) < HANDLE_SIZE / 2
             })
             setResizeHandle(handleKey as ResizeHandle);
-            setActiveAnnotationId(null);
             return;
         }
     }
 
     setSelectedId(null);
 
+    if (!tool) {
+        setAction('none');
+        return;
+    }
+
     if (tool === 'text') {
         const newAnnotation: TextAnnotation = {
             id: nanoid(), x: offsetX, y: offsetY, color, type: 'text', text: ''
         };
-        setAnnotations(prev => {
-            let nextAnnotations = prev;
-            const prevActive = prev.find(a => a.id === previouslyActiveId);
-            if (prevActive && prevActive.type === 'text' && prevActive.text.trim() === '') {
-                nextAnnotations = prev.filter(a => a.id !== previouslyActiveId);
-            }
-            const finalAnnotations = [...nextAnnotations, newAnnotation];
-            pushToHistory(finalAnnotations);
-            return finalAnnotations;
-        });
+        const finalAnnotations = [...currentAnnotations.current, newAnnotation];
+        setAnnotations(finalAnnotations);
+        pushToHistory(finalAnnotations);
 
         setActiveAnnotationId(newAnnotation.id);
         setSelectedId(newAnnotation.id);
         setAction('none');
 
     } else {
-        setActiveAnnotationId(null);
         setAction('drawing');
         const newAnnotation: ShapeObject = {
             id: nanoid(), x: offsetX, y: offsetY, color,
@@ -297,8 +326,15 @@ export const useAnnotations = (imageUrl: string) => {
 
     if (action === 'none') {
         const hoveredAnn = annotations.slice().reverse().find(ann => isPointInShape({x: offsetX, y: offsetY}, ann));
-        const cursor = hoveredAnn ? getCursorForPosition({x: offsetX, y: offsetY}, hoveredAnn) : 'default';
-        canvas.style.cursor = cursor || (tool === 'text' ? 'text' : 'crosshair');
+        const cursor = hoveredAnn ? getCursorForPosition({x: offsetX, y: offsetY}, hoveredAnn) : null;
+        
+        if (cursor) {
+            canvas.style.cursor = cursor;
+        } else if (tool) {
+            canvas.style.cursor = tool === 'text' ? 'text' : 'crosshair';
+        } else {
+            canvas.style.cursor = 'default';
+        }
         return;
     }
     
@@ -353,6 +389,8 @@ export const useAnnotations = (imageUrl: string) => {
   const finishDrawing = () => {
     if (action === 'none') return;
     
+    const wasDrawing = action === 'drawing';
+
     const finalAnnotations = currentAnnotations.current.map(ann => {
         if (ann.id !== selectedId) return ann;
         
@@ -380,6 +418,10 @@ export const useAnnotations = (imageUrl: string) => {
     pushToHistory(finalAnnotations);
     setAction('none');
     setResizeHandle(null);
+
+    if (wasDrawing) {
+      setTool(null);
+    }
   };
   
   const getAnnotatedImage = async (includeAnnotations = true): Promise<string | null> => {
@@ -438,6 +480,7 @@ export const useAnnotations = (imageUrl: string) => {
     },
     clearCanvas,
     handleUndo,
-    getAnnotatedImage
+    getAnnotatedImage,
+    commitActiveAnnotation
   };
 };

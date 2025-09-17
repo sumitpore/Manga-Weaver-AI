@@ -1,13 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import type { ComicPage, TextAnnotation, AnnotationObject } from '../types';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import type { ComicPage, TextAnnotation, AnnotationObject, TextElement } from '../types';
 import { useAnnotations } from '../hooks/useAnnotations';
 import { AnnotationToolbar } from './AnnotationToolbar';
 import { AnnotationCanvas } from './AnnotationCanvas';
 import jsPDF from 'jspdf';
+import { parsePx } from '../utils/canvas';
 
 interface ComicDisplayProps {
   pages: ComicPage[];
   onRegeneratePage: (pageId: string, annotatedImageB64: string, annotationText: string) => void;
+  onUpdateTextElements: (pageId: string, updatedTextElements: TextElement[]) => void;
+  setIsDownloadingPdf: (isDownloading: boolean) => void;
 }
 
 type PageState = {
@@ -16,12 +19,20 @@ type PageState = {
   historyIndex: number;
 };
 
-export const ComicDisplay: React.FC<ComicDisplayProps> = ({ pages, onRegeneratePage }) => {
+export const ComicDisplay: React.FC<ComicDisplayProps> = ({ pages, onRegeneratePage, onUpdateTextElements, setIsDownloadingPdf }) => {
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [allPagesState, setAllPagesState] = useState<Record<string, PageState>>({});
+  const [selectedTextElementId, setSelectedTextElementId] = useState<string | null>(null);
+  const [editingTextElementId, setEditingTextElementId] = useState<string | null>(null);
   
   const activePage = pages[currentPageIndex];
+  
+  const pagesRef = useRef(pages);
+  useEffect(() => {
+    pagesRef.current = pages;
+  }, [pages]);
 
+  // FIX: The useAnnotations hook expects 2 arguments, but was called with 3. Removed the extra argument.
   const {
     canvasRef,
     imageContainerRef,
@@ -42,7 +53,8 @@ export const ComicDisplay: React.FC<ComicDisplayProps> = ({ pages, onRegenerateP
     clearCanvas,
     handleUndo,
     getAnnotatedImage,
-  } = useAnnotations(activePage.imageUrl);
+    commitActiveAnnotation,
+  } = useAnnotations(activePage.imageUrl, editingTextElementId);
 
   // Load state when page changes
   useEffect(() => {
@@ -54,20 +66,55 @@ export const ComicDisplay: React.FC<ComicDisplayProps> = ({ pages, onRegenerateP
     } else {
       clearCanvas();
     }
+    setEditingTextElementId(null);
+    setSelectedTextElementId(null);
   }, [activePage.id, setAnnotations, setHistory, setHistoryIndex, clearCanvas, allPagesState]);
 
 
   const handlePageChange = (newIndex: number) => {
     if (newIndex < 0 || newIndex >= pages.length) return;
 
-    // Save current state before switching
+    // Save current annotation state before switching
     setAllPagesState(prev => ({
       ...prev,
       [activePage.id]: { annotations, history, historyIndex }
     }));
     
+    // Clear text element selection when changing pages
+    setSelectedTextElementId(null);
+    setEditingTextElementId(null);
+    
     setCurrentPageIndex(newIndex);
   };
+  
+  const handleTextUpdate = useCallback((elementId: string, newText: string) => {
+      const newElements = activePage.textElements.map(el =>
+          el.id === elementId ? { ...el, text: newText } : el
+      );
+      onUpdateTextElements(activePage.id, newElements);
+  }, [activePage, onUpdateTextElements]);
+
+  const handlePositionUpdate = useCallback((elementId: string, newX: string, newY: string) => {
+      const newElements = activePage.textElements.map(el =>
+          el.id === elementId ? { ...el, x: newX, y: newY } : el
+      );
+      onUpdateTextElements(activePage.id, newElements);
+  }, [activePage, onUpdateTextElements]);
+
+  const handleTextDelete = useCallback((elementId: string) => {
+      const newElements = activePage.textElements.filter(el => el.id !== elementId);
+      onUpdateTextElements(activePage.id, newElements);
+      // Clear selection after deletion
+      setSelectedTextElementId(null);
+      setEditingTextElementId(null);
+  }, [activePage, onUpdateTextElements]);
+
+  const handleTextElementSelect = useCallback((elementId: string | null) => {
+      setSelectedTextElementId(elementId);
+      if (elementId === null) {
+        setEditingTextElementId(null);
+      }
+  }, []);
 
   const handleRegenerateClick = async () => {
       const annotatedImageB64 = await getAnnotatedImage();
@@ -85,41 +132,89 @@ export const ComicDisplay: React.FC<ComicDisplayProps> = ({ pages, onRegenerateP
       onRegeneratePage(activePage.id, annotatedImageB64, annotationText);
   };
   
-  const handleDownload = async () => {
-    const pdf = new jsPDF({
-      orientation: 'p',
-      unit: 'px',
-      format: [1080, 1350] // Set page size to image aspect ratio
-    });
+const handleDownload = useCallback(async () => {
+    setIsDownloadingPdf(true);
+    const container = imageContainerRef.current;
 
-    for (let i = 0; i < pages.length; i++) {
-        const page = pages[i];
-        if (i > 0) {
-            pdf.addPage();
+    try {
+        if (container) {
+            container.classList.add('pdf-export-mode');
         }
-        await new Promise<void>(resolve => {
-            const img = new Image();
-            img.crossOrigin = "anonymous";
-            img.onload = () => {
-                 pdf.addImage(img, 'PNG', 0, 0, 1080, 1350);
-                 resolve();
-            };
-            img.onerror = () => {
-                console.error(`Failed to load image for page ${i + 1}`);
-                resolve(); // Continue to next page even if one fails
-            };
-            img.src = page.imageUrl;
-        });
-    }
 
-    pdf.save(`manga-comic-${Date.now()}.pdf`);
-  };
+        setSelectedTextElementId(null);
+        setEditingTextElementId(null);
+        setActiveAnnotationId(null);
+        await new Promise<void>(resolve => setTimeout(resolve, 50));
+
+        const pdf = new jsPDF({
+            orientation: 'p',
+            unit: 'px',
+            format: [1024, 1024]
+        });
+
+        const { default: html2canvas } = await import('https://aistudiocdn.com/html2canvas@^1.4.1');
+        const originalPageIndex = currentPageIndex;
+        const currentPages = pagesRef.current;
+
+        for (let i = 0; i < currentPages.length; i++) {
+            if (currentPageIndex !== i) {
+                setCurrentPageIndex(i);
+                
+                await new Promise<void>(resolve => {
+                    requestAnimationFrame(() => {
+                        setTimeout(resolve, 200);
+                    });
+                });
+            }
+
+            const containerToCapture = imageContainerRef.current;
+            if (!containerToCapture) continue;
+
+            const images = containerToCapture.querySelectorAll('img');
+            await Promise.all(Array.from(images).map(img => 
+                img.complete ? Promise.resolve() : new Promise<void>(resolve => {
+                    const timeout = setTimeout(resolve, 2000);
+                    img.onload = () => { clearTimeout(timeout); resolve(); };
+                    img.onerror = () => { clearTimeout(timeout); resolve(); };
+                })
+            ));
+
+            await document.fonts.ready;
+            await new Promise<void>(resolve => setTimeout(resolve, 50));
+
+            const canvas = await html2canvas(containerToCapture, {
+                width: 1024,
+                height: 1024,
+                useCORS: true,
+                logging: false,
+                backgroundColor: null,
+                scale: 1,
+            });
+
+            const imgData = canvas.toDataURL('image/png', 1.0);
+            if (i > 0) pdf.addPage([1024, 1024], 'p');
+            pdf.addImage(imgData, 'PNG', 0, 0, 1024, 1024);
+        }
+
+        if (currentPageIndex !== originalPageIndex) {
+            setCurrentPageIndex(originalPageIndex);
+        }
+
+        pdf.save(`manga-comic-${Date.now()}.pdf`);
+
+    } finally {
+        if (container) {
+            container.classList.remove('pdf-export-mode');
+        }
+        setIsDownloadingPdf(false);
+    }
+}, [currentPageIndex, pages.length, imageContainerRef, setActiveAnnotationId, setIsDownloadingPdf]);
 
   return (
-    <div className="w-full max-w-7xl flex flex-col items-center gap-8">
+    <div className="w-full max-w-7xl flex flex-col items-center gap-8 relative">
         <div className="w-full text-center">
             <h2 className="font-heading text-3xl font-bold text-zinc-900 mb-2">Your Comic</h2>
-            <p className="text-zinc-600">Use the tools to add notes, then regenerate or download your creation.</p>
+            <p className="text-zinc-600">Use the tools to add notes, or double-click text to edit. Then regenerate or download.</p>
         </div>
 
          {/* Page Navigation */}
@@ -143,7 +238,7 @@ export const ComicDisplay: React.FC<ComicDisplayProps> = ({ pages, onRegenerateP
             </button>
         </div>
 
-        <div className="w-full flex flex-col lg:flex-row-reverse items-start gap-8">
+        <div className="w-full flex flex-col lg:flex-row-reverse items-start gap-8 lg:justify-center">
             <AnnotationToolbar
                 tool={tool}
                 setTool={setTool}
@@ -159,6 +254,7 @@ export const ComicDisplay: React.FC<ComicDisplayProps> = ({ pages, onRegenerateP
             <AnnotationCanvas
                 activePage={activePage}
                 tool={tool}
+                setTool={setTool}
                 color={color}
                 annotations={annotations}
                 setAnnotations={setAnnotations}
@@ -167,6 +263,14 @@ export const ComicDisplay: React.FC<ComicDisplayProps> = ({ pages, onRegenerateP
                 eventHandlers={eventHandlers}
                 canvasRef={canvasRef}
                 imageContainerRef={imageContainerRef}
+                onTextUpdate={handleTextUpdate}
+                onPositionUpdate={handlePositionUpdate}
+                onTextDelete={handleTextDelete}
+                selectedTextElementId={selectedTextElementId}
+                onTextElementSelect={handleTextElementSelect}
+                editingTextElementId={editingTextElementId}
+                setEditingTextElementId={setEditingTextElementId}
+                commitActiveAnnotation={commitActiveAnnotation}
             />
         </div>
     </div>

@@ -31,8 +31,8 @@ const ActionIcon: React.FC<Omit<ToolIconProps, 'isActive'> & { disabled?: boolea
 );
 
 interface AnnotationToolbarProps {
-    tool: Tool;
-    setTool: (tool: Tool) => void;
+    tool: Tool | null;
+    setTool: (tool: Tool | null) => void;
     color: string;
     setColor: (color: string) => void;
     handleUndo: () => void;
@@ -63,16 +63,16 @@ export const AnnotationToolbar: React.FC<AnnotationToolbarProps> = ({
                 <div>
                     <p className="text-sm font-medium text-zinc-600 text-center mb-2">Tools</p>
                     <div className="flex flex-wrap justify-center gap-2">
-                        <ToolIcon title="Arrow" isActive={tool === 'arrow'} onClick={() => setTool('arrow')}>
+                        <ToolIcon title="Arrow" isActive={tool === 'arrow'} onClick={() => setTool(tool === 'arrow' ? null : 'arrow')}>
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" stroke-linecap="round" strokeLinejoin="round"><path d="M11 19H5V13"/><path d="M19 5L5 19"/></svg>
                         </ToolIcon>
-                        <ToolIcon title="Text" isActive={tool === 'text'} onClick={() => setTool('text')}>
+                        <ToolIcon title="Text" isActive={tool === 'text'} onClick={() => setTool(tool === 'text' ? null : 'text')}>
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" x2="15" y1="20" y2="20"/><line x1="12" x2="12" y1="4" y2="20"/></svg>
                         </ToolIcon>
-                        <ToolIcon title="Rectangle" isActive={tool === 'rectangle'} onClick={() => setTool('rectangle')}>
+                        <ToolIcon title="Rectangle" isActive={tool === 'rectangle'} onClick={() => setTool(tool === 'rectangle' ? null : 'rectangle')}>
                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
                         </ToolIcon>
-                        <ToolIcon title="Circle" isActive={tool === 'circle'} onClick={() => setTool('circle')}>
+                        <ToolIcon title="Circle" isActive={tool === 'circle'} onClick={() => setTool(tool === 'circle' ? null : 'circle')}>
                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/></svg>
                         </ToolIcon>
                     </div>
@@ -102,11 +102,11 @@ export const AnnotationToolbar: React.FC<AnnotationToolbarProps> = ({
                          <ActionIcon title="Clear" onClick={clearCanvas} disabled={!hasAnnotations}>
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
                          </ActionIcon>
-                         <ActionIcon title="Regenerate" onClick={handleRegenerateClick} disabled={!hasAnnotations}>
+                         <ActionIcon title="Regenerate Image" onClick={handleRegenerateClick} disabled={!hasAnnotations}>
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 18h-4"/><path d="M11 3H9"/></svg>
                          </ActionIcon>
-                         <ActionIcon title="Download Image" onClick={handleDownload}>
-                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v8"/><path d="m16 6-4 4-4-4"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 18h.01"/><path d="M10 18h.01"/></svg>
+                         <ActionIcon title="Download PDF" onClick={handleDownload}>
+                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                          </ActionIcon>
                     </div>
                 </div>

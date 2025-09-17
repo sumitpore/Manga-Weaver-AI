@@ -6,19 +6,20 @@ import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { generateComicStory, regeneratePage } from './services/geminiService';
-import type { ComicPage, AppStatus } from './types';
+import type { ComicPage, AppStatus, TextElement } from './types';
 
 const App: React.FC = () => {
   const [comicPages, setComicPages] = useState<ComicPage[]>([]);
   const [status, setStatus] = useState<AppStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const handleGeneration = useCallback(async (prompt: string, files: File[], numPages: number) => {
     setStatus('loading');
     setError(null);
     try {
-      const pages = await generateComicStory(prompt, files, numPages);
-      setComicPages(pages);
+      const newPages = await generateComicStory(prompt, files, numPages);
+      setComicPages(newPages);
       setStatus('editing');
     } catch (err) {
       console.error(err);
@@ -36,7 +37,7 @@ const App: React.FC = () => {
     try {
       const updatedPage = await regeneratePage(annotatedImageB64, annotationText);
       setComicPages(prevPages => 
-        prevPages.map(p => (p.id === pageId ? { ...updatedPage, id: pageId } : p))
+        prevPages.map(p => (p.id === pageId ? { ...p, imageUrl: updatedPage.imageUrl } : p))
       );
       setStatus('editing');
     } catch (err) {
@@ -46,6 +47,12 @@ const App: React.FC = () => {
     }
   }, [comicPages]);
 
+  const handleUpdateTextElements = useCallback((pageId: string, updatedTextElements: TextElement[]) => {
+      setComicPages(prevPages =>
+          prevPages.map(p => (p.id === pageId ? { ...p, textElements: updatedTextElements } : p))
+      );
+  }, []);
+
   const handleStartOver = () => {
     setComicPages([]);
     setStatus('idle');
@@ -54,7 +61,14 @@ const App: React.FC = () => {
 
 
   return (
-    <div className="bg-white text-zinc-900 font-sans min-h-screen flex flex-col">
+    <div className="bg-white text-zinc-900 font-sans min-h-screen flex flex-col relative">
+      {isDownloadingPdf && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex flex-col items-center justify-center backdrop-blur-sm">
+            <div className="w-16 h-16 border-4 border-t-4 border-zinc-200 border-t-indigo-600 rounded-full animate-spin"></div>
+            <p className="text-white font-medium font-sans text-lg mt-4">Generating PDF...</p>
+            <p className="text-sm text-zinc-300 text-center max-w-sm">Capturing each page, please wait a moment.</p>
+        </div>
+      )}
       <Header onStartOver={handleStartOver} showStartOver={status !== 'idle'}/>
       <main className="flex-grow flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
         {status === 'loading' && <LoadingSpinner />}
@@ -62,7 +76,9 @@ const App: React.FC = () => {
         {status === 'editing' && comicPages.length > 0 && (
           <ComicDisplay 
             pages={comicPages} 
-            onRegeneratePage={handleRegeneration} 
+            onRegeneratePage={handleRegeneration}
+            onUpdateTextElements={handleUpdateTextElements}
+            setIsDownloadingPdf={setIsDownloadingPdf}
           />
         )}
         {error && <div className="mt-4 text-red-600 bg-red-100 p-3 rounded-lg">{error}</div>}
