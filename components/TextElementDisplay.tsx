@@ -289,11 +289,9 @@ export const TextElementDisplay: React.FC<TextElementDisplayProps> = ({
         const newX = dragStart.elementX + adjustedDeltaX;
         const newY = dragStart.elementY + adjustedDeltaY;
 
-        const constrainedX = Math.max(20, Math.min(newX, 1024 - 280));
-        const constrainedY = Math.max(20, Math.min(newY, 1024 - 80));
-
+        // Allow free movement anywhere on the canvas without constraints
         if (onPositionUpdate) {
-            onPositionUpdate(draggingId, `${constrainedX}px`, `${constrainedY}px`);
+            onPositionUpdate(draggingId, `${newX}px`, `${newY}px`);
         }
     };
 

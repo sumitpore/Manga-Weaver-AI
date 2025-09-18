@@ -97,7 +97,7 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({
         <div className="flex-grow w-full flex items-center justify-center">
             <div
                 ref={imageContainerRef}
-                className="relative shadow-2xl rounded-lg border-4 border-zinc-200 flex-shrink-0 overflow-hidden"
+                className="relative shadow-2xl rounded-lg border-4 border-zinc-200 flex-shrink-0"
                 style={{ width: '1024px', height: '1024px' }}
             >
                 <img src={activePage.imageUrl} alt="Generated comic page" className="w-full h-full object-contain rounded-lg" />

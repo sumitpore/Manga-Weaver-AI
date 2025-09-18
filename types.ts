@@ -58,6 +58,7 @@ export type AnnotationObject = ShapeObject | TextAnnotation;
 export interface TextElementData {
     type: 'dialogue' | 'narrative' | 'thoughts';
     text: string;
+    character_identifier?: string;
 }
 
 export interface ComicPanelPrompt {
