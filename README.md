@@ -3,7 +3,7 @@
 An AI-powered application to create and refine single or multi-page manga/anime comics. Provide a story, upload reference characters, and use intuitive annotations to guide the AI in perfecting every panel.
 
 ## Demo
-[![Watch Demo](https://img.youtube.com/vi/MWZpLwOQq18/0.jpg)](https://www.youtube-nocookie.com/embed/MWZpLwOQq18?si=h19zrupo1nalBOgw&amp;controls=0)
+[![Watch Demo](./demo-screenshot.png)](https://www.youtube-nocookie.com/embed/MWZpLwOQq18?si=h19zrupo1nalBOgw&amp;controls=0)
 
 ## Run Locally
 
