@@ -6,6 +6,7 @@ import { AnnotationCanvas } from './AnnotationCanvas';
 import jsPDF from 'jspdf';
 import { parsePx } from '../utils/canvas';
 
+
 interface ComicDisplayProps {
   pages: ComicPage[];
   onRegeneratePage: (pageId: string, annotatedImageB64: string, annotationText: string) => void;
@@ -24,6 +25,7 @@ export const ComicDisplay: React.FC<ComicDisplayProps> = ({ pages, onRegenerateP
   const [allPagesState, setAllPagesState] = useState<Record<string, PageState>>({});
   const [selectedTextElementId, setSelectedTextElementId] = useState<string | null>(null);
   const [editingTextElementId, setEditingTextElementId] = useState<string | null>(null);
+  const [showHelpModal, setShowHelpModal] = useState(false);
   
   const activePage = pages[currentPageIndex];
   
@@ -210,8 +212,58 @@ const handleDownload = useCallback(async () => {
     }
 }, [currentPageIndex, pages.length, imageContainerRef, setActiveAnnotationId, setIsDownloadingPdf]);
 
+useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+            setShowHelpModal(false);
+        }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+}, []);
+
   return (
     <div className="w-full max-w-7xl flex flex-col items-center gap-8 relative">
+        {showHelpModal && (
+            <div 
+                className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center backdrop-blur-sm p-4"
+                onClick={() => setShowHelpModal(false)}
+                style={{ animation: 'fade-in 0.2s ease-out' }}
+            >
+                <style>{`
+                    @keyframes fade-in {
+                        from { opacity: 0; }
+                        to { opacity: 1; }
+                    }
+                `}</style>
+                <div 
+                    className="bg-white p-2 rounded-xl shadow-2xl max-w-3xl w-full relative" 
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="aspect-video w-full">
+                        <iframe
+                            className="w-full h-full rounded-lg"
+                            src="https://www.youtube-nocookie.com/embed/WiyR_L5exbA?si=p3zsTP4GMObLPnm9&amp;controls=0"
+                            title="How to use tools"
+                            frameBorder="0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            referrerPolicy="strict-origin-when-cross-origin"
+                            allowFullScreen
+                        ></iframe>
+                    </div>
+                     <button 
+                        onClick={() => setShowHelpModal(false)} 
+                        className="absolute -top-3 -right-3 w-8 h-8 bg-zinc-800 text-white rounded-full flex items-center justify-center hover:bg-zinc-900 transition-colors shadow-lg"
+                        aria-label="Close video player"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        )}
+
         <div className="w-full text-center">
             <h2 className="font-heading text-3xl font-bold text-zinc-900 mb-2">Your Comic</h2>
             <p className="text-zinc-600">Use the tools to add notes, or double-click text to edit. Then regenerate or download.</p>
@@ -250,6 +302,7 @@ const handleDownload = useCallback(async () => {
                 hasAnnotations={hasAnnotations}
                 handleRegenerateClick={handleRegenerateClick}
                 handleDownload={handleDownload}
+                handleShowHelp={() => setShowHelpModal(true)}
             />
             <AnnotationCanvas
                 activePage={activePage}

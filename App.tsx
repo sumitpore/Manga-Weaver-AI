@@ -1,30 +1,39 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { HomePage } from './components/HomePage';
 import { ComicDisplay } from './components/ComicDisplay';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { generateComicStory, regeneratePage } from './services/geminiService';
-import type { ComicPage, AppStatus, TextElement } from './types';
+import type { ComicPage, AppStatus, TextElement, ProgressUpdate } from './types';
 
 const App: React.FC = () => {
   const [comicPages, setComicPages] = useState<ComicPage[]>([]);
   const [status, setStatus] = useState<AppStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [progress, setProgress] = useState<ProgressUpdate | null>(null);
 
   const handleGeneration = useCallback(async (prompt: string, files: File[], numPages: number) => {
     setStatus('loading');
     setError(null);
+    setProgress({ message: 'Warming up the AI...', progress: 0 });
+
+    const onProgressCallback = (update: ProgressUpdate) => {
+        setProgress(update);
+    };
+
     try {
-      const newPages = await generateComicStory(prompt, files, numPages);
+      const newPages = await generateComicStory(prompt, files, numPages, onProgressCallback);
       setComicPages(newPages);
       setStatus('editing');
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : 'An unknown error occurred.');
       setStatus('idle');
+    } finally {
+        setProgress(null);
     }
   }, []);
 
@@ -71,7 +80,7 @@ const App: React.FC = () => {
       )}
       <Header onStartOver={handleStartOver} showStartOver={status !== 'idle'}/>
       <main className="flex-grow flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
-        {status === 'loading' && <LoadingSpinner />}
+        {status === 'loading' && <LoadingSpinner progress={progress} />}
         {status === 'idle' && <HomePage onGenerate={handleGeneration} />}
         {status === 'editing' && comicPages.length > 0 && (
           <ComicDisplay 

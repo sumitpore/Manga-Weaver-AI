@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Modality, GenerateContentResponse, Type } from "@google/genai";
-import type { ComicPage, StoryOutline, TextElement, TextElementData, ComicPanelPrompt, StoryPagePrompt } from '../types';
+import type { ComicPage, StoryOutline, TextElement, TextElementData, ComicPanelPrompt, StoryPagePrompt, ProgressCallback } from '../types';
 import { nanoid } from 'nanoid';
 import { parsePx } from '../utils/canvas';
 import { 
@@ -228,13 +228,31 @@ const getPanelLayoutDescription = (panelCount: number): string => {
     }
 };
 
-const generatePageContent = async (panels: ComicPanelPrompt[], imageParts: any[]): Promise<{ imageUrl: string }> => {
-    const MAX_ATTEMPTS = 2; // 1 initial try + 2 retries
+const generatePageContent = async (
+    panels: ComicPanelPrompt[],
+    imageParts: any[],
+    onProgress: ProgressCallback,
+    pageNum: number,
+    totalPages: number,
+    progressStart: number,
+    progressChunk: number,
+): Promise<{ imageUrl: string }> => {
+    const MAX_ATTEMPTS = 2;
     let lastImageUrl = '';
-    let lastReasoning = ''; // To store failure reason for retries
+    let lastReasoning = '';
+    
+    // Each attempt consists of generation and verification. Split the progress chunk accordingly.
+    const progressPerAttempt = progressChunk / MAX_ATTEMPTS;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         console.log(`--- 🎨 Image Generation Attempt ${attempt} of ${MAX_ATTEMPTS} ---`);
+        
+        const attemptProgressStart = progressStart + (attempt - 1) * progressPerAttempt;
+        onProgress({
+            message: `Drawing page ${pageNum} of ${totalPages} (Attempt ${attempt})...`,
+            progress: Math.floor(attemptProgressStart),
+        });
+
         const model = 'gemini-2.5-flash-image-preview';
 
         const panelDescriptions = panels.map(p => `Panel ${p.panel_number}: ${p.visual_description}`).join('\n\n');
@@ -243,25 +261,20 @@ const generatePageContent = async (panels: ComicPanelPrompt[], imageParts: any[]
         const promptParts: any[] = [];
 
         if (attempt === 1 || !lastImageUrl) {
-            // First attempt or if a previous attempt failed to produce an image
             const layoutDescription = getPanelLayoutDescription(panels.length);
             visualPrompt = createInitialImageVisualPrompt(layoutDescription, panelDescriptions);
             promptParts.push({ text: visualPrompt });
-            promptParts.push(...imageParts); // Character references
+            promptParts.push(...imageParts);
         } else {
-            // Subsequent attempts: use the last failed image and reasoning
             visualPrompt = createRetryImageVisualPrompt(attempt, lastReasoning, panelDescriptions);
-
             const mimeType = lastImageUrl.substring(lastImageUrl.indexOf(":") + 1, lastImageUrl.indexOf(";"));
             const data = lastImageUrl.split(',')[1];
             const lastImagePart = { inlineData: { data, mimeType } };
-
             promptParts.push({ text: visualPrompt });
-            promptParts.push(lastImagePart); // The failed image
-            promptParts.push(...imageParts); // Character references
+            promptParts.push(lastImagePart);
+            promptParts.push(...imageParts);
         }
 
-        // Use specialized regeneration system instruction for retry attempts
         const currentSystemInstruction = attempt === 1 ? createGenerateImageSystemInstruction() : createRegenerateFailedImageSystemInstruction();
 
         console.groupCollapsed(`🎨 [Prompt] Generating Page Content (Image) - Attempt ${attempt}`);
@@ -298,7 +311,7 @@ const generatePageContent = async (panels: ComicPanelPrompt[], imageParts: any[]
                         '%c ',
                         `padding: 200px; background: url(${generatedImageUrl}) no-repeat center/contain;`
                     );
-                    break; // Found an image, break the loop
+                    break;
                 }
             }
         } finally {
@@ -306,13 +319,19 @@ const generatePageContent = async (panels: ComicPanelPrompt[], imageParts: any[]
         }
 
         if (generatedImageUrl) {
-            lastImageUrl = generatedImageUrl; // Save the last generated image
+            lastImageUrl = generatedImageUrl;
+            
+            onProgress({
+                message: `Verifying page ${pageNum} image (Attempt ${attempt})...`,
+                progress: Math.floor(attemptProgressStart + progressPerAttempt / 2),
+            });
+
             const { isMatch, reasoning } = await verifyImageContent(generatedImageUrl, panels, imageParts);
             if (isMatch) {
                 console.log(`✅ [Success] Image passed verification on attempt ${attempt}.`);
                 return { imageUrl: generatedImageUrl };
             } else {
-                lastReasoning = reasoning; // Store the reasoning for the next attempt
+                lastReasoning = reasoning;
                 console.warn(`⚠️ [Verification Failed] Attempt ${attempt} did not match the prompt. Reasoning: ${reasoning}`);
                 if (attempt < MAX_ATTEMPTS) {
                     console.log('Retrying with feedback...');
@@ -320,7 +339,7 @@ const generatePageContent = async (panels: ComicPanelPrompt[], imageParts: any[]
             }
         } else {
              console.error(`🚫 [Error] AI did not return an image on attempt ${attempt}.`);
-             lastImageUrl = ''; // Reset lastImageUrl so next attempt starts fresh if no image was produced
+             lastImageUrl = '';
              lastReasoning = 'The AI model failed to produce an image in the previous step.';
         }
     }
@@ -339,7 +358,6 @@ const getTextElementPositions = async (imageUrl: string, panels: ComicPanelPromp
 
     console.groupCollapsed(`📍 [Prompt] Getting Text Element Positions for Page`);
     
-    // FIX: Declare response outside the try-catch block to make it accessible in the catch block.
     let response: GenerateContentResponse | undefined;
     try {
         const mimeType = imageUrl.substring(imageUrl.indexOf(":") + 1, imageUrl.indexOf(";"));
@@ -444,14 +462,12 @@ const getTextElementPositions = async (imageUrl: string, panels: ComicPanelPromp
         const parsedArray: any[] = parsed.placements;
         console.log('📍 [AI Positioning] Parsed positioning data from 1024x1024 space:', parsedArray);
         
-        // Log placement reasoning for debugging
         parsedArray.forEach((item, index) => {
             if (item.placement_reasoning) {
                 console.log(`🧠 [AI Reasoning ${index + 1}] ${item.element_type} for Panel ${item.panel_number}: ${item.placement_reasoning}`);
             }
         });
 
-        // Extract panel boundaries for validation if provided
         const panelBoundaries = parsed.panel_analysis?.panel_boundaries || [];
         const panelMap = new Map();
         panelBoundaries.forEach((panel: any) => {
@@ -463,13 +479,10 @@ const getTextElementPositions = async (imageUrl: string, panels: ComicPanelPromp
             });
         });
 
-        // Helper function to check if two 250x100px text rectangles overlap
         const checkTextElementOverlap = (x1: number, y1: number, x2: number, y2: number): boolean => {
-            // Two rectangles overlap if: |x1-x2| < 280px AND |y1-y2| < 130px (with 30px gap)
             return Math.abs(x1 - x2) < 280 && Math.abs(y1 - y2) < 130;
         };
 
-        // Track positioned elements to prevent overlaps
         const positionedElements: { x: number; y: number; panel: number }[] = [];
 
         const aiElements: TextElement[] = parsedArray
@@ -480,19 +493,15 @@ const getTextElementPositions = async (imageUrl: string, panels: ComicPanelPromp
                     typeof item.element_type === 'string' &&
                     typeof item.text === 'string'
                 ) {
-                    // Use AI-provided coordinates as-is without automatic adjustments
                     const x = parsePx(item.x_position);
                     const y = parsePx(item.y_position);
                     
-                    // Log coordinate information for debugging (but don't modify coordinates)
                     console.log(`📍 [AI Coordinates] Using exact AI placement for "${item.text.substring(0, 30)}...": (${x}, ${y})`);
                     
-                    // Optional: Log warnings for potentially problematic coordinates but don't change them
                     if (x < 0 || x + 250 > 1024 || y < 0 || y + 100 > 1024) {
                         console.warn(`⚠️ [Coordinate Warning] AI coordinates for "${item.text.substring(0, 30)}...": (${x}, ${y}) may extend beyond 1024x1024 canvas bounds`);
                     }
 
-                    // Optional: Log panel boundary information but don't adjust coordinates
                     if (item.panel_number && panelMap.has(item.panel_number)) {
                         const panel = panelMap.get(item.panel_number);
                         const finalX = parsePx(item.x_position);
@@ -505,7 +514,6 @@ const getTextElementPositions = async (imageUrl: string, panels: ComicPanelPromp
                         }
                     }
 
-                    // Track positioned elements for informational purposes (but don't adjust for overlaps)
                     const currentX = parsePx(item.x_position);
                     const currentY = parsePx(item.y_position);
                     const currentPanel = item.panel_number || 1;
@@ -518,7 +526,6 @@ const getTextElementPositions = async (imageUrl: string, panels: ComicPanelPromp
                         console.warn(`⚠️ [Overlap Info] Text "${item.text.substring(0, 30)}..." at (${currentX}, ${currentY}) may overlap with ${overlappingElements.length} other text element(s) in Panel ${currentPanel}`);
                     }
 
-                    // Map AI element types to our expected types
                     let mappedType: TextElement['type'];
                     switch (item.element_type.toLowerCase()) {
                         case 'character_dialogue':
@@ -539,7 +546,6 @@ const getTextElementPositions = async (imageUrl: string, panels: ComicPanelPromp
                             return null;
                     }
 
-                    // Enhanced anchor validation for dialogue and thoughts
                     let anchor = undefined;
                     if ((mappedType === 'dialogue' || mappedType === 'thoughts') && item.anchor_position && 
                         typeof item.anchor_position.x === 'string' && typeof item.anchor_position.y === 'string') {
@@ -568,7 +574,6 @@ const getTextElementPositions = async (imageUrl: string, panels: ComicPanelPromp
 
                     console.log(`✅ [Element Created] ${mappedType} at (${item.x_position}, ${item.y_position})${anchor ? ` with anchor (${anchor.x}, ${anchor.y})` : ''}: "${item.text.substring(0, 30)}..."`);
                     
-                    // Add to positioned elements for overlap tracking
                     positionedElements.push({
                         x: parsePx(item.x_position),
                         y: parsePx(item.y_position),
@@ -591,13 +596,10 @@ const getTextElementPositions = async (imageUrl: string, panels: ComicPanelPromp
         return aiElements;
 
     } catch (e) {
-        // FIX: Check if `response` is defined before accessing `response.text` using optional chaining.
         console.error("🚫 [Critical Error] Failed to parse text element positions JSON:", e, response?.text);
         console.error("🔍 [Debug] This usually indicates the AI returned malformed JSON or an unexpected response structure");
         
-        // Try to extract any useful information from the raw response for debugging
         try {
-            // FIX: Check if `response` is defined before trying to access its properties.
             if (response) {
                 const partialJson = response.text.trim();
                 console.log("🧪 [Debug] Raw response length:", partialJson.length);
@@ -608,7 +610,6 @@ const getTextElementPositions = async (imageUrl: string, panels: ComicPanelPromp
             console.error("🚫 [Debug Error] Could not even extract debug info:", debugError);
         }
         
-        // Return empty so the comic can still be shown without text
         console.log("⚠️ [Fallback] Returning empty text elements array to allow comic display without text");
         return [];
     } finally {
@@ -616,15 +617,44 @@ const getTextElementPositions = async (imageUrl: string, panels: ComicPanelPromp
     }
 };
 
-export const generateComicStory = async (prompt: string, files: File[], numPages: number): Promise<ComicPage[]> => {
+export const generateComicStory = async (prompt: string, files: File[], numPages: number, onProgress: ProgressCallback): Promise<ComicPage[]> => {
+    const onProgressUpdate = onProgress || (() => {});
+
+    onProgressUpdate({ message: 'Crafting the story outline...', progress: 5 });
     const storyOutline = await generateStoryOutline(prompt, numPages, files.length > 0);
+    onProgressUpdate({ message: 'Story outline complete!', progress: 10 });
+    
     const imageParts = await Promise.all(files.map(fileToGenerativePart));
     
     const comicPages: ComicPage[] = [];
 
-    for(const pagePrompt of storyOutline.pages) {
-        const { imageUrl } = await generatePageContent(pagePrompt.panels, imageParts);
+    const numGeneratedPages = storyOutline.pages.length;
+    if (numGeneratedPages === 0) {
+        throw new Error("The AI failed to generate a story outline. Please try a different prompt.");
+    }
+
+    const progressPerPage = 90 / numGeneratedPages;
+    const imageGenProgressChunk = progressPerPage * 0.7; // 70% of page progress for image gen + verify
+    const textPlaceProgressChunk = progressPerPage * 0.3; // 30% for text placement
+    let currentProgress = 10;
+
+    for(const [index, pagePrompt] of storyOutline.pages.entries()) {
+        const pageNum = index + 1;
+
+        const { imageUrl } = await generatePageContent(
+            pagePrompt.panels,
+            imageParts,
+            onProgressUpdate,
+            pageNum,
+            numGeneratedPages,
+            currentProgress,
+            imageGenProgressChunk
+        );
+        currentProgress += imageGenProgressChunk;
+
+        onProgressUpdate({ message: `Placing text on page ${pageNum}...`, progress: Math.floor(currentProgress) });
         const textElements = await getTextElementPositions(imageUrl, pagePrompt.panels);
+        currentProgress += textPlaceProgressChunk;
         
         comicPages.push({
             id: nanoid(),
@@ -632,12 +662,15 @@ export const generateComicStory = async (prompt: string, files: File[], numPages
             storyPrompt: pagePrompt,
             textElements,
         });
+        
+        onProgressUpdate({ message: `Page ${pageNum} finished!`, progress: Math.floor(currentProgress) });
     }
 
     if (comicPages.length === 0) {
         throw new Error("The AI failed to generate any comic pages. Please try again.");
     }
     
+    onProgressUpdate({ message: 'Finalizing your comic...', progress: 100 });
     return comicPages;
 };
 

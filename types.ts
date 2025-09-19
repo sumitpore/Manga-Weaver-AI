@@ -16,6 +16,13 @@ export interface ComicPage {
 
 export type AppStatus = 'idle' | 'loading' | 'editing';
 
+export interface ProgressUpdate {
+  message: string;
+  progress: number; // A value from 0 to 100
+}
+
+export type ProgressCallback = (update: ProgressUpdate) => void;
+
 export type Tool = 'arrow' | 'rectangle' | 'circle' | 'text';
 
 // Base interfaces for annotations
