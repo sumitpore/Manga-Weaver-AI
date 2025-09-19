@@ -29,11 +29,6 @@ export const ComicDisplay: React.FC<ComicDisplayProps> = ({ pages, onRegenerateP
   
   const activePage = pages[currentPageIndex];
   
-  const pagesRef = useRef(pages);
-  useEffect(() => {
-    pagesRef.current = pages;
-  }, [pages]);
-
   // FIX: The useAnnotations hook expects 2 arguments, but was called with 3. Removed the extra argument.
   const {
     canvasRef,
@@ -163,7 +158,7 @@ const handleDownload = useCallback(async () => {
 
         const { default: html2canvas } = await import('https://aistudiocdn.com/html2canvas@^1.4.1');
         const originalPageIndex = currentPageIndex;
-        const currentPages = pagesRef.current;
+        const currentPages = pages;
 
         for (let i = 0; i < currentPages.length; i++) {
             if (currentPageIndex !== i) {
@@ -171,7 +166,7 @@ const handleDownload = useCallback(async () => {
                 
                 await new Promise<void>(resolve => {
                     requestAnimationFrame(() => {
-                        setTimeout(resolve, 200);
+                        setTimeout(resolve, 250);
                     });
                 });
             }
@@ -217,7 +212,7 @@ const handleDownload = useCallback(async () => {
         }
         setIsDownloadingPdf(false);
     }
-}, [currentPageIndex, pages.length, imageContainerRef, setActiveAnnotationId, setIsDownloadingPdf]);
+}, [currentPageIndex, pages, imageContainerRef, setActiveAnnotationId, setIsDownloadingPdf, setEditingTextElementId, setSelectedTextElementId]);
 
 useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -263,7 +258,7 @@ useEffect(() => {
                         className="absolute -top-3 -right-3 w-8 h-8 bg-zinc-800 text-white rounded-full flex items-center justify-center hover:bg-zinc-900 transition-colors shadow-lg"
                         aria-label="Close video player"
                     >
-                        <svg xmlns="http://www.w.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
