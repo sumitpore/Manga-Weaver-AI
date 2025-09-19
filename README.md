@@ -2,15 +2,6 @@
 
 An AI-powered application to create and refine single or multi-page manga/anime comics. Provide a story, upload reference characters, and use intuitive annotations to guide the AI in perfecting every panel.
 
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
-# Run and deploy AI Studio app
-
-This contains everything you need to run app locally.
-
-View the app in AI Studio: https://ai.studio/apps/drive/1_3iQbPLTNy8T_Yb-MuxKGuBxFyGEiOs-
 
 ## Run Locally
 
