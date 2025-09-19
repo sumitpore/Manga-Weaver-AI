@@ -103,6 +103,13 @@ export const ComicDisplay: React.FC<ComicDisplayProps> = ({ pages, onRegenerateP
       onUpdateTextElements(activePage.id, newElements);
   }, [activePage, onUpdateTextElements]);
 
+  const handleAnchorUpdate = useCallback((elementId: string, newAnchor: { x: string; y: string }) => {
+    const newElements = activePage.textElements.map(el =>
+        el.id === elementId ? { ...el, anchor: newAnchor } : el
+    );
+    onUpdateTextElements(activePage.id, newElements);
+}, [activePage, onUpdateTextElements]);
+
   const handleTextDelete = useCallback((elementId: string) => {
       const newElements = activePage.textElements.filter(el => el.id !== elementId);
       onUpdateTextElements(activePage.id, newElements);
@@ -256,7 +263,7 @@ useEffect(() => {
                         className="absolute -top-3 -right-3 w-8 h-8 bg-zinc-800 text-white rounded-full flex items-center justify-center hover:bg-zinc-900 transition-colors shadow-lg"
                         aria-label="Close video player"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg xmlns="http://www.w.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
@@ -318,6 +325,7 @@ useEffect(() => {
                 imageContainerRef={imageContainerRef}
                 onTextUpdate={handleTextUpdate}
                 onPositionUpdate={handlePositionUpdate}
+                onAnchorUpdate={handleAnchorUpdate}
                 onTextDelete={handleTextDelete}
                 selectedTextElementId={selectedTextElementId}
                 onTextElementSelect={handleTextElementSelect}

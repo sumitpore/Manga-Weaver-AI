@@ -21,6 +21,7 @@ interface AnnotationCanvasProps {
     imageContainerRef: RefObject<HTMLDivElement>;
     onTextUpdate: (elementId: string, newText: string) => void;
     onPositionUpdate?: (elementId: string, newX: string, newY: string) => void;
+    onAnchorUpdate?: (elementId: string, newAnchor: { x: string; y: string }) => void;
     onTextDelete?: (elementId: string) => void;
     selectedTextElementId?: string | null;
     onTextElementSelect?: (elementId: string | null) => void;
@@ -43,6 +44,7 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({
     imageContainerRef,
     onTextUpdate,
     onPositionUpdate,
+    onAnchorUpdate,
     onTextDelete,
     selectedTextElementId,
     onTextElementSelect,
@@ -110,6 +112,7 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({
                     textElements={activePage.textElements}
                     onUpdate={onTextUpdate}
                     onPositionUpdate={onPositionUpdate}
+                    onAnchorUpdate={onAnchorUpdate}
                     onDelete={onTextDelete}
                     selectedElementId={selectedTextElementId}
                     onSelect={onTextElementSelect}

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import type { TextElement } from '../types';
 import { parsePx } from '../utils/canvas';
 
@@ -6,6 +6,7 @@ interface TextElementDisplayProps {
     textElements: TextElement[];
     onUpdate: (elementId: string, newText: string) => void;
     onPositionUpdate?: (elementId: string, newX: string, newY: string) => void;
+    onAnchorUpdate?: (elementId: string, newAnchor: { x: string; y: string }) => void;
     onDelete?: (elementId: string) => void;
     selectedElementId?: string | null;
     onSelect?: (elementId: string | null) => void;
@@ -76,7 +77,8 @@ const EditorTextarea: React.FC<{
 export const TextElementDisplay: React.FC<TextElementDisplayProps> = ({ 
     textElements, 
     onUpdate, 
-    onPositionUpdate, 
+    onPositionUpdate,
+    onAnchorUpdate,
     onDelete, 
     selectedElementId, 
     onSelect,
@@ -86,6 +88,7 @@ export const TextElementDisplay: React.FC<TextElementDisplayProps> = ({
     const [tailPaths, setTailPaths] = useState<Array<{ id: string; d: string; type: 'tail' | 'thought_bubble' }>>([]);
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const [dragStart, setDragStart] = useState<{ x: number; y: number; elementX: number; elementY: number } | null>(null);
+    const [draggingAnchor, setDraggingAnchor] = useState<{ elementId: string; startMouseX: number; startMouseY: number; startAnchorX: number; startAnchorY: number; } | null>(null);
     const bubbleRefs = useRef(new Map<string, HTMLDivElement>());
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -230,93 +233,97 @@ export const TextElementDisplay: React.FC<TextElementDisplayProps> = ({
     };
 
     const handleMouseDown = (e: React.MouseEvent, elementId: string) => {
+        // If an editor is open, a click outside should close it.
         if (editingId) {
-            // Instead of directly closing the editor, we find the active textarea and blur it.
-            // The blur event handler will then save the text and close the editor gracefully.
             const editorContainer = bubbleRefs.current.get(editingId);
+            // If the click is on the element being edited, let the editor handle it.
+            if (editingId === elementId) {
+                e.stopPropagation();
+                return;
+            }
+            // Otherwise, blur the active editor.
             const textarea = editorContainer?.querySelector('textarea');
             if (textarea) {
                 textarea.blur();
             } else {
-                // Fallback in case the textarea isn't found
+                // Fallback to ensure editor state is cleared
                 onSetEditing(null);
             }
-
-            if (editingId === elementId) {
-                // If the user clicked the same element that's being edited (e.g., its border),
-                // we just want to close the editor. Stop further event processing to prevent starting a drag.
-                e.stopPropagation();
-                return;
-            }
+        }
+    
+        const element = textElements.find(el => el.id === elementId);
+        if (!element) {
+            return; // Element not found, do nothing.
         }
         
+        // For ALL elements, we want to select them and prevent default text selection.
         e.preventDefault();
-        
         if (onSelect) {
             onSelect(elementId);
         }
         
-        const element = textElements.find(el => el.id === elementId);
-        if (!element) return;
-
-        const elementX = parsePx(element.x);
-        const elementY = parsePx(element.y);
-
+        // All elements are draggable. Set up dragging.
         setDraggingId(elementId);
         setDragStart({
             x: e.clientX,
             y: e.clientY,
-            elementX,
-            elementY
+            elementX: parsePx(element.x),
+            elementY: parsePx(element.y)
         });
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
-        if (!draggingId || !dragStart) return;
-
+    const handleMouseMove = useCallback((e: MouseEvent) => {
         const containerRect = containerRef.current?.getBoundingClientRect();
         if (!containerRect) return;
 
-        const deltaX = e.clientX - dragStart.x;
-        const deltaY = e.clientY - dragStart.y;
-
-        const scaleX = containerRect.width / 1024;
-        const scaleY = containerRect.height / 1024;
-
-        const adjustedDeltaX = deltaX / scaleX;
-        const adjustedDeltaY = deltaY / scaleY;
-
-        const newX = dragStart.elementX + adjustedDeltaX;
-        const newY = dragStart.elementY + adjustedDeltaY;
-
-        // Allow free movement anywhere on the canvas without constraints
-        if (onPositionUpdate) {
-            onPositionUpdate(draggingId, `${newX}px`, `${newY}px`);
+        const scaleX = 1024 / containerRect.width;
+        const scaleY = 1024 / containerRect.height;
+        
+        if (draggingId && dragStart) {
+            const deltaX = (e.clientX - dragStart.x) * scaleX;
+            const deltaY = (e.clientY - dragStart.y) * scaleY;
+            const newX = dragStart.elementX + deltaX;
+            const newY = dragStart.elementY + deltaY;
+            if (onPositionUpdate) {
+                onPositionUpdate(draggingId, `${newX}px`, `${newY}px`);
+            }
+        } else if (draggingAnchor) {
+            if (!onAnchorUpdate) return;
+            const deltaX = (e.clientX - draggingAnchor.startMouseX) * scaleX;
+            const deltaY = (e.clientY - draggingAnchor.startMouseY) * scaleY;
+            const newX = draggingAnchor.startAnchorX + deltaX;
+            const newY = draggingAnchor.startAnchorY + deltaY;
+            const clampedX = Math.max(0, Math.min(1024, newX));
+            const clampedY = Math.max(0, Math.min(1024, newY));
+            onAnchorUpdate(draggingAnchor.elementId, { x: `${clampedX}px`, y: `${clampedY}px` });
         }
-    };
+    }, [draggingId, dragStart, draggingAnchor, onPositionUpdate, onAnchorUpdate]);
 
-    const handleMouseUp = () => {
+    const handleMouseUp = useCallback(() => {
         setDraggingId(null);
         setDragStart(null);
-    };
+        setDraggingAnchor(null);
+    }, []);
 
     useEffect(() => {
-        if (draggingId) {
+        if (draggingId || draggingAnchor) {
+            document.body.style.cursor = draggingId ? 'move' : 'grabbing';
             document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
+            document.addEventListener('mouseup', handleMouseUp, { once: true });
             return () => {
+                document.body.style.cursor = '';
                 document.removeEventListener('mousemove', handleMouseMove);
                 document.removeEventListener('mouseup', handleMouseUp);
             };
         }
-    }, [draggingId, dragStart, textElements]);
+    }, [draggingId, draggingAnchor, handleMouseMove, handleMouseUp]);
 
     return (
         <div 
             ref={containerRef} 
             className="absolute top-0 left-0 w-full h-full pointer-events-none"
         >
-            <svg width="100%" height="100%" className="absolute top-0 left-0">
+            <svg width="100%" height="100%" className="absolute top-0 left-0" style={{ overflow: 'visible' }}>
                 {tailPaths.map(p => (
                     <path
                         key={p.id}
@@ -327,10 +334,50 @@ export const TextElementDisplay: React.FC<TextElementDisplayProps> = ({
                         strokeDasharray={p.type === 'thought_bubble' ? '4 4' : 'none'}
                     />
                 ))}
+                {textElements.map(el => {
+                    if (el.type === 'dialogue' && el.anchor && selectedElementId === el.id) {
+                        const anchorX = parsePx(el.anchor.x);
+                        const anchorY = parsePx(el.anchor.y);
+                        return (
+                            <g
+                                key={`${el.id}-anchor`}
+                                onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    const currentElement = textElements.find(elem => elem.id === el.id);
+                                    if (!currentElement?.anchor) return;
+                                    setDraggingAnchor({
+                                        elementId: el.id,
+                                        startMouseX: e.clientX,
+                                        startMouseY: e.clientY,
+                                        startAnchorX: parsePx(currentElement.anchor.x),
+                                        startAnchorY: parsePx(currentElement.anchor.y)
+                                    });
+                                }}
+                                className="pointer-events-auto"
+                                style={{ cursor: 'grab' }}
+                            >
+                                {/* FIX: Replaced unsupported 'title' attribute on SVG <g> with a nested <title> element for tooltips. */}
+                                <title>Drag to move speech bubble anchor</title>
+                                <circle cx={anchorX} cy={anchorY} r="10" fill="rgba(59, 130, 246, 0.3)" />
+                                <circle cx={anchorX} cy={anchorY} r="6" fill="rgba(59, 130, 246, 0.8)" stroke="#fff" strokeWidth="2" />
+                            </g>
+                        );
+                    }
+                    return null;
+                })}
             </svg>
             {textElements.map(el => {
                 const isSelected = selectedElementId === el.id;
                 const isEditing = editingId === el.id;
+                const isDialogueWithAnchor = el.type === 'dialogue' && el.anchor;
+
+                const cursorClass = isEditing ? 'cursor-text' : 'cursor-move';
+                
+                let title = "Click to select, drag to move, double-click to edit.";
+                if (isDialogueWithAnchor) {
+                    title = "Click to select, drag to move, double-click to edit. Drag the blue circle to move the tail.";
+                }
+
                 return (
                     <div
                         key={el.id}
@@ -338,7 +385,7 @@ export const TextElementDisplay: React.FC<TextElementDisplayProps> = ({
                             if (node) bubbleRefs.current.set(el.id, node);
                             else bubbleRefs.current.delete(el.id);
                         }}
-                        className={`text-element ${typeToClassMap[el.type]} pointer-events-auto ${draggingId === el.id ? 'opacity-80 scale-105 shadow-xl' : isSelected ? 'shadow-lg ring-2 ring-blue-400' : 'hover:shadow-lg'} transition-all duration-150 relative ${isEditing ? 'cursor-text' : 'cursor-move'}`}
+                        className={`text-element ${typeToClassMap[el.type]} pointer-events-auto ${draggingId === el.id ? 'opacity-80 scale-105 shadow-xl' : isSelected ? 'shadow-lg ring-2 ring-blue-400' : 'hover:shadow-lg'} transition-all duration-150 relative ${cursorClass}`}
                         style={{
                             top: el.y,
                             left: el.x,
@@ -346,7 +393,7 @@ export const TextElementDisplay: React.FC<TextElementDisplayProps> = ({
                         }}
                         onMouseDown={(e) => handleMouseDown(e, el.id)}
                         onDoubleClick={() => handleDoubleClick(el.id)}
-                        title="Click to select, drag to move, double-click to edit"
+                        title={title}
                     >
                         {isEditing ? (
                            <EditorTextarea 
