@@ -1,8 +1,7 @@
-
 import React, { useState, useRef, DragEvent } from 'react';
 
 interface HomePageProps {
-  onGenerate: (prompt: string, files: File[], numPages: number) => void;
+  onGenerate: (prompt: string, files: File[], numPages: number, isQualityCheckEnabled: boolean) => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({ onGenerate }) => {
@@ -11,6 +10,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onGenerate }) => {
   const [previews, setPreviews] = useState<string[]>([]);
   const [numPages, setNumPages] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
+  const [isQualityCheckEnabled, setIsQualityCheckEnabled] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -74,7 +74,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onGenerate }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (prompt.trim()) {
-      onGenerate(prompt, files, numPages);
+      onGenerate(prompt, files, numPages, isQualityCheckEnabled);
     }
   };
   
@@ -139,17 +139,42 @@ export const HomePage: React.FC<HomePageProps> = ({ onGenerate }) => {
                                 />
                              </label>
                         </div>
-                        <button
-                            type="submit"
-                            disabled={!prompt.trim()}
-                            className="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center transition-all duration-300 shadow-md hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed"
-                            aria-label="Generate Comic"
-                        >
-                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M8 6L12 2l4 4"/>
-                                <path d="M12 2v20"/>
-                            </svg>
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <div 
+                                className="flex items-center gap-2 group cursor-pointer px-3 py-1.5 rounded-full transition-colors border border-zinc-200 bg-white hover:bg-zinc-50"
+                                onClick={() => setIsQualityCheckEnabled(!isQualityCheckEnabled)}
+                                title="Fast mode skips AI verification for quicker results. Better Quality mode enables verification and retries for more accurate images."
+                            >
+                                <label htmlFor="quality-check-toggle" className={`text-sm font-medium transition-colors cursor-pointer ${!isQualityCheckEnabled ? 'text-indigo-600 font-semibold' : 'text-zinc-500'}`}>
+                                    Fast
+                                </label>
+                                <div className="relative">
+                                    <input 
+                                        type="checkbox" 
+                                        id="quality-check-toggle" 
+                                        className="sr-only" 
+                                        checked={isQualityCheckEnabled} 
+                                        readOnly
+                                    />
+                                    <div className="w-10 h-6 rounded-full bg-indigo-600"></div>
+                                    <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${isQualityCheckEnabled ? 'translate-x-4' : ''}`}></div>
+                                </div>
+                                 <label htmlFor="quality-check-toggle" className={`text-sm font-medium transition-colors cursor-pointer ${isQualityCheckEnabled ? 'text-indigo-600 font-semibold' : 'text-zinc-500'}`}>
+                                    Better Quality
+                                </label>
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={!prompt.trim()}
+                                className="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center transition-all duration-300 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed flex-shrink-0"
+                                aria-label="Generate Comic"
+                            >
+                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M8 6L12 2l4 4"/>
+                                    <path d="M12 2v20"/>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -15,7 +15,7 @@ const App: React.FC = () => {
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [progress, setProgress] = useState<ProgressUpdate | null>(null);
 
-  const handleGeneration = useCallback(async (prompt: string, files: File[], numPages: number) => {
+  const handleGeneration = useCallback(async (prompt: string, files: File[], numPages: number, isQualityCheckEnabled: boolean) => {
     setStatus('loading');
     setError(null);
     // FIX: The ProgressUpdate type requires a 'stage' property. Set to 'outline' for initial state.
@@ -26,7 +26,7 @@ const App: React.FC = () => {
     };
 
     try {
-      const newPages = await generateComicStory(prompt, files, numPages, onProgressCallback);
+      const newPages = await generateComicStory(prompt, files, numPages, onProgressCallback, isQualityCheckEnabled);
       setComicPages(newPages);
       setStatus('editing');
     } catch (err) {

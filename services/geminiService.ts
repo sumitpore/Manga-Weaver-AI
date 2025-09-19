@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Modality, GenerateContentResponse, Type } from "@google/genai";
 import type { ComicPage, StoryOutline, TextElement, TextElementData, ComicPanelPrompt, StoryPagePrompt, ProgressCallback, ProgressUpdate, PageProgress } from '../types';
 import { nanoid } from 'nanoid';
@@ -231,17 +232,20 @@ const generatePageContent = async (
     panels: ComicPanelPrompt[],
     imageParts: any[],
     onPageProgress: (update: { message: string, progress: number }) => void,
+    isQualityCheckEnabled: boolean,
 ): Promise<{ imageUrl: string }> => {
-    const MAX_ATTEMPTS = 2;
+    const MAX_ATTEMPTS = isQualityCheckEnabled ? 2 : 1;
     let lastImageUrl = '';
     let lastReasoning = '';
     
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         console.log(`--- 🎨 Image Generation Attempt ${attempt} of ${MAX_ATTEMPTS} ---`);
         
-        const generationProgress = 25 + (attempt - 1) * 50;
+        const generationProgress = isQualityCheckEnabled ? (25 + (attempt - 1) * 50) : 50;
+        const message = isQualityCheckEnabled ? `Drawing (Attempt ${attempt})...` : 'Drawing...';
+
         onPageProgress({
-            message: `Drawing (Attempt ${attempt})...`,
+            message: message,
             progress: generationProgress,
         });
 
@@ -313,6 +317,11 @@ const generatePageContent = async (
         if (generatedImageUrl) {
             lastImageUrl = generatedImageUrl;
             
+            if (!isQualityCheckEnabled) {
+                 console.log(`✅ [Success] Image generated. Skipping verification as Quality Check is off.`);
+                return { imageUrl: generatedImageUrl };
+            }
+
             const verificationProgress = 50 + (attempt - 1) * 40;
             onPageProgress({
                 message: `Verifying (Attempt ${attempt})...`,
@@ -610,7 +619,7 @@ const getTextElementPositions = async (imageUrl: string, panels: ComicPanelPromp
     }
 };
 
-export const generateComicStory = async (prompt: string, files: File[], numPages: number, onProgress: ProgressCallback): Promise<ComicPage[]> => {
+export const generateComicStory = async (prompt: string, files: File[], numPages: number, onProgress: ProgressCallback, isQualityCheckEnabled: boolean): Promise<ComicPage[]> => {
     const onProgressUpdate = onProgress || (() => {});
     const CONCURRENCY_LIMIT = 2;
 
@@ -693,7 +702,8 @@ export const generateComicStory = async (prompt: string, files: File[], numPages
                             message: update.message,
                             progress: 5 + Math.floor((update.progress / 100) * 85) // Scale 0-100 to 5-90
                         });
-                    }
+                    },
+                    isQualityCheckEnabled
                 );
 
                 onPageProgressCallback({ message: 'Placing text...', progress: 95 });
