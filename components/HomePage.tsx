@@ -145,7 +145,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onGenerate }) => {
                             className="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center transition-all duration-300 shadow-md hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed"
                             aria-label="Generate Comic"
                         >
-                             <svg xmlns="http://www.w.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M8 6L12 2l4 4"/>
                                 <path d="M12 2v20"/>
                             </svg>
@@ -153,6 +153,10 @@ export const HomePage: React.FC<HomePageProps> = ({ onGenerate }) => {
                     </div>
                 </div>
             </div>
+
+            <p className="mt-3 text-xs text-zinc-500">
+                Note: More pages will take longer to generate.
+            </p>
 
             {previews.length > 0 && (
                 <div className="mt-8 w-full">

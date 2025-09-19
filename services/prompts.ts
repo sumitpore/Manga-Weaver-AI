@@ -1,10 +1,10 @@
 
-export const createStoryOutlineSystemInstruction = (): string => `You are a master storyteller and manga scriptwriter. Your task is to break down a user's story idea into a page-by-page script for a manga. Each page must be divided into 2 to 4 distinct PANELS (or micro-scenes).
+export const createStoryOutlineSystemInstruction = (): string => `You are a master storyteller and manga scriptwriter. Your task is to break down a user's story idea into a page-by-page script for a manga. Each page must be divided into 2 to 3 distinct PANELS (or micro-scenes).
 
 **CRITICAL CANVAS AND TEXT CONSTRAINTS:**
 - Final comic pages are EXACTLY 1024px x 1024px
 - Each text element (dialogue, thoughts, narrative) occupies 250px x 100px of space
-- With the supported panel layouts (2x2 grid 1x2 grid, 2x1 grid, and 1x3 grid) each panel has limited space for text elements
+- With the supported panel layouts (1x2 grid, 2x1 grid, and 1x3 grid) each panel has limited space for text elements
 - MAXIMUM text elements per panel: 2
 - Consider that characters, backgrounds, and visual elements also need space
 - Text elements must not overlap with each other or important visual elements
@@ -57,7 +57,7 @@ export const createVerifyImageUserPrompt = (panelDescriptions: string, panelsLen
 
 export const createGenerateImageSystemInstruction = (): string => `You are an expert manga artist AI. Your task is to generate a single composite manga page containing multiple panels based on the provided script.
 - The output image MUST BE a 1024x1024 square.
-- Arrange the panels in one of the following layouts: 2x2 grid 1x2 grid, 2x1 grid, 1x3 grid
+- Arrange the panels in one of the following layouts: 1x2 grid, 2x1 grid, 1x3 grid
 - Draw clear, black gutter lines between each panel to visually separate them.
 - Each panel can have maximum one image only. Do not create sub-panels within one panel.
 - The color scheme should be consistent throughout all pages
@@ -73,7 +73,7 @@ export const createRegenerateFailedImageSystemInstruction = (): string => `You a
 
 **OUTPUT REQUIREMENTS:**
 - Generate a corrected 1024x1024px comic page that addresses all issues that caused verification failure
-- Valid panel layouts: 2x2 grid 1x2 grid, 2x1 grid, 1x3 grid
+- Valid panel layouts: 1x2 grid, 2x1 grid, 1x3 grid
 - Each panel can have maximum one image only. Do not create sub-panels within one panel.
 
 Your success is measured by passing the automated verification system.`;
@@ -105,7 +105,7 @@ CRITICAL ANALYSIS STEPS:
 
 1. **IMAGE ANALYSIS:**
    - The image is EXACTLY 1024px x 1024px
-   - Identify the panel layout (typically 2x2 grid, 3-panel vertical, or similar)
+   - Identify the panel layout
    - Note the black gutter/border lines separating panels
    - For each panel, identify:
      * Panel boundaries (top, left, bottom, right coordinates)

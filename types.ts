@@ -16,9 +16,17 @@ export interface ComicPage {
 
 export type AppStatus = 'idle' | 'loading' | 'editing';
 
+export interface PageProgress {
+    pageNum: number;
+    message: string;
+    progress: number; // 0-100 for this page specifically
+}
+
 export interface ProgressUpdate {
   message: string;
-  progress: number; // A value from 0 to 100
+  progress: number; // This will be the overall progress from 0-100
+  stage: 'outline' | 'pages' | 'finalizing';
+  pageDetails?: PageProgress[]; // Optional details for each page, used in the 'pages' stage
 }
 
 export type ProgressCallback = (update: ProgressUpdate) => void;

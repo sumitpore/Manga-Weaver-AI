@@ -1,6 +1,5 @@
-
 import { GoogleGenAI, Modality, GenerateContentResponse, Type } from "@google/genai";
-import type { ComicPage, StoryOutline, TextElement, TextElementData, ComicPanelPrompt, StoryPagePrompt, ProgressCallback } from '../types';
+import type { ComicPage, StoryOutline, TextElement, TextElementData, ComicPanelPrompt, StoryPagePrompt, ProgressCallback, ProgressUpdate, PageProgress } from '../types';
 import { nanoid } from 'nanoid';
 import { parsePx } from '../utils/canvas';
 import { 
@@ -231,26 +230,19 @@ const getPanelLayoutDescription = (panelCount: number): string => {
 const generatePageContent = async (
     panels: ComicPanelPrompt[],
     imageParts: any[],
-    onProgress: ProgressCallback,
-    pageNum: number,
-    totalPages: number,
-    progressStart: number,
-    progressChunk: number,
+    onPageProgress: (update: { message: string, progress: number }) => void,
 ): Promise<{ imageUrl: string }> => {
     const MAX_ATTEMPTS = 2;
     let lastImageUrl = '';
     let lastReasoning = '';
     
-    // Each attempt consists of generation and verification. Split the progress chunk accordingly.
-    const progressPerAttempt = progressChunk / MAX_ATTEMPTS;
-
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         console.log(`--- 🎨 Image Generation Attempt ${attempt} of ${MAX_ATTEMPTS} ---`);
         
-        const attemptProgressStart = progressStart + (attempt - 1) * progressPerAttempt;
-        onProgress({
-            message: `Drawing page ${pageNum} of ${totalPages} (Attempt ${attempt})...`,
-            progress: Math.floor(attemptProgressStart),
+        const generationProgress = 25 + (attempt - 1) * 50;
+        onPageProgress({
+            message: `Drawing (Attempt ${attempt})...`,
+            progress: generationProgress,
         });
 
         const model = 'gemini-2.5-flash-image-preview';
@@ -321,9 +313,10 @@ const generatePageContent = async (
         if (generatedImageUrl) {
             lastImageUrl = generatedImageUrl;
             
-            onProgress({
-                message: `Verifying page ${pageNum} image (Attempt ${attempt})...`,
-                progress: Math.floor(attemptProgressStart + progressPerAttempt / 2),
+            const verificationProgress = 50 + (attempt - 1) * 40;
+            onPageProgress({
+                message: `Verifying (Attempt ${attempt})...`,
+                progress: verificationProgress,
             });
 
             const { isMatch, reasoning } = await verifyImageContent(generatedImageUrl, panels, imageParts);
@@ -403,7 +396,7 @@ const getTextElementPositions = async (imageUrl: string, panels: ComicPanelPromp
                         panel_analysis: {
                             type: Type.OBJECT,
                             properties: {
-                                layout_type: { type: Type.STRING, description: "e.g., '2x2_grid', '3_vertical', '2_horizontal'" },
+                                layout_type: { type: Type.STRING, description: "e.g., '1x3_grid', '1x2_grid', '2x1_grid'" },
                                 panel_count: { type: Type.INTEGER },
                                 panel_boundaries: {
                                     type: Type.ARRAY,
@@ -619,59 +612,127 @@ const getTextElementPositions = async (imageUrl: string, panels: ComicPanelPromp
 
 export const generateComicStory = async (prompt: string, files: File[], numPages: number, onProgress: ProgressCallback): Promise<ComicPage[]> => {
     const onProgressUpdate = onProgress || (() => {});
+    const CONCURRENCY_LIMIT = 2;
 
-    onProgressUpdate({ message: 'Crafting the story outline...', progress: 5 });
+    let currentProgress: ProgressUpdate = {
+        message: 'Crafting the story outline...',
+        progress: 5,
+        stage: 'outline',
+        pageDetails: []
+    };
+    onProgressUpdate(currentProgress);
+
     const storyOutline = await generateStoryOutline(prompt, numPages, files.length > 0);
-    onProgressUpdate({ message: 'Story outline complete!', progress: 10 });
+    
+    currentProgress = { ...currentProgress, message: 'Story outline complete!', progress: 10 };
+    onProgressUpdate(currentProgress);
     
     const imageParts = await Promise.all(files.map(fileToGenerativePart));
-    
-    const comicPages: ComicPage[] = [];
-
     const numGeneratedPages = storyOutline.pages.length;
     if (numGeneratedPages === 0) {
         throw new Error("The AI failed to generate a story outline. Please try a different prompt.");
     }
 
-    const progressPerPage = 90 / numGeneratedPages;
-    const imageGenProgressChunk = progressPerPage * 0.7; // 70% of page progress for image gen + verify
-    const textPlaceProgressChunk = progressPerPage * 0.3; // 30% for text placement
-    let currentProgress = 10;
+    const initialPageDetails: PageProgress[] = storyOutline.pages.map(p => ({
+        pageNum: p.page_number,
+        message: 'Waiting...',
+        progress: 0,
+    }));
 
-    for(const [index, pagePrompt] of storyOutline.pages.entries()) {
-        const pageNum = index + 1;
+    currentProgress = {
+        ...currentProgress,
+        message: `Generating ${numGeneratedPages} comic pages...`,
+        stage: 'pages',
+        pageDetails: initialPageDetails
+    };
+    onProgressUpdate(currentProgress);
 
-        const { imageUrl } = await generatePageContent(
-            pagePrompt.panels,
-            imageParts,
-            onProgressUpdate,
-            pageNum,
-            numGeneratedPages,
-            currentProgress,
-            imageGenProgressChunk
-        );
-        currentProgress += imageGenProgressChunk;
+    const allComicPages: ComicPage[] = [];
+    const pagesToProcess = storyOutline.pages.map((p, i) => ({ pagePrompt: p, index: i }));
+    
+    // Progress calculation constants
+    const OUTLINE_PROGRESS = 10;
+    const PAGE_GEN_PROGRESS = 85; // Pages generation takes from 10% to 95%
+    const FINALIZE_PROGRESS = 5;
 
-        onProgressUpdate({ message: `Placing text on page ${pageNum}...`, progress: Math.floor(currentProgress) });
-        const textElements = await getTextElementPositions(imageUrl, pagePrompt.panels);
-        currentProgress += textPlaceProgressChunk;
+    for (let i = 0; i < pagesToProcess.length; i += CONCURRENCY_LIMIT) {
+        const chunk = pagesToProcess.slice(i, i + CONCURRENCY_LIMIT);
         
-        comicPages.push({
-            id: nanoid(),
-            imageUrl,
-            storyPrompt: pagePrompt,
-            textElements,
+        const chunkPromises = chunk.map(({ pagePrompt, index }) => {
+            const processSinglePage = async (): Promise<ComicPage> => {
+                const pageNum = index + 1;
+
+                const onPageProgressCallback = (update: { message: string, progress: number }) => {
+                    const pageDetails = currentProgress.pageDetails ? [...currentProgress.pageDetails] : [];
+                    const pageIndex = pageDetails.findIndex(p => p.pageNum === pageNum);
+                    if (pageIndex !== -1) {
+                        pageDetails[pageIndex] = { ...pageDetails[pageIndex], ...update };
+                    }
+
+                    const totalPageProgress = pageDetails.reduce((sum, p) => sum + p.progress, 0);
+                    const avgPageProgress = totalPageProgress / numGeneratedPages;
+                    
+                    const overallProgress = OUTLINE_PROGRESS + (avgPageProgress / 100) * PAGE_GEN_PROGRESS;
+
+                    currentProgress = {
+                        ...currentProgress,
+                        progress: Math.floor(overallProgress),
+                        pageDetails
+                    };
+                    onProgressUpdate(currentProgress);
+                };
+                
+                onPageProgressCallback({ message: 'Starting...', progress: 5 });
+                
+                // Image generation takes up to 90% of a single page's progress
+                const { imageUrl } = await generatePageContent(
+                    pagePrompt.panels,
+                    imageParts,
+                    (update) => {
+                         onPageProgressCallback({
+                            message: update.message,
+                            progress: 5 + Math.floor((update.progress / 100) * 85) // Scale 0-100 to 5-90
+                        });
+                    }
+                );
+
+                onPageProgressCallback({ message: 'Placing text...', progress: 95 });
+                const textElements = await getTextElementPositions(imageUrl, pagePrompt.panels);
+                
+                const finalPage: ComicPage = {
+                    id: nanoid(),
+                    imageUrl,
+                    storyPrompt: pagePrompt,
+                    textElements,
+                };
+
+                onPageProgressCallback({ message: 'Done!', progress: 100 });
+                return finalPage;
+            };
+            return processSinglePage();
         });
-        
-        onProgressUpdate({ message: `Page ${pageNum} finished!`, progress: Math.floor(currentProgress) });
-    }
 
-    if (comicPages.length === 0) {
+        const chunkResults = await Promise.all(chunkPromises);
+        allComicPages.push(...chunkResults);
+    }
+    
+    const finalOrderedPages = allComicPages.sort((a, b) => {
+        const indexA = storyOutline.pages.findIndex(p => p.page_number === a.storyPrompt.page_number);
+        const indexB = storyOutline.pages.findIndex(p => p.page_number === b.storyPrompt.page_number);
+        return indexA - indexB;
+    });
+
+    if (finalOrderedPages.length === 0) {
         throw new Error("The AI failed to generate any comic pages. Please try again.");
     }
     
-    onProgressUpdate({ message: 'Finalizing your comic...', progress: 100 });
-    return comicPages;
+    onProgressUpdate({
+        message: 'Finalizing your comic...',
+        progress: 100,
+        stage: 'finalizing',
+        pageDetails: currentProgress.pageDetails?.map(p => ({...p, progress: 100}))
+    });
+    return finalOrderedPages;
 };
 
 export const regeneratePage = async (annotatedImageB64: string, annotationText: string): Promise<{ imageUrl: string }> => {

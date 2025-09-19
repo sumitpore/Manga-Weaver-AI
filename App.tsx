@@ -18,7 +18,8 @@ const App: React.FC = () => {
   const handleGeneration = useCallback(async (prompt: string, files: File[], numPages: number) => {
     setStatus('loading');
     setError(null);
-    setProgress({ message: 'Warming up the AI...', progress: 0 });
+    // FIX: The ProgressUpdate type requires a 'stage' property. Set to 'outline' for initial state.
+    setProgress({ message: 'Warming up the AI...', progress: 0, stage: 'outline' });
 
     const onProgressCallback = (update: ProgressUpdate) => {
         setProgress(update);
